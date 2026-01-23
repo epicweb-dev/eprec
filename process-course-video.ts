@@ -647,7 +647,7 @@ function parseCliArgs() {
           .option("enable-transcription", {
             type: "boolean",
             describe: "Enable whisper.cpp transcription skip checks",
-            default: false,
+            default: true,
           })
           .option("whisper-model-path", {
             type: "string",
