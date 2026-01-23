@@ -14,53 +14,14 @@ export type ProcessingSummary = {
   jarvisWarnings: number;
 };
 
-export async function writeSummaryLogs(options: {
-  tmpDir: string;
+export async function writeJarvisLogs(options: {
   outputDir: string;
   inputPath: string;
-  summary: ProcessingSummary;
-  summaryDetails: string[];
   jarvisWarnings: JarvisWarning[];
   jarvisEdits: JarvisEdit[];
   dryRun: boolean;
 }) {
-  const {
-    tmpDir,
-    outputDir,
-    inputPath,
-    summary,
-    summaryDetails,
-    jarvisWarnings,
-    jarvisEdits,
-    dryRun,
-  } = options;
-
-  const summaryLines = [
-    `Input: ${inputPath}`,
-    `Output dir: ${outputDir}`,
-    `Chapters selected: ${summary.totalSelected}`,
-    `${dryRun ? "Would process" : "Processed"} chapters: ${summary.processed}`,
-    `Skipped (short initial): ${summary.skippedShortInitial}`,
-    `Skipped (trimmed short): ${summary.skippedShortTrimmed}`,
-    `Skipped (transcription): ${summary.skippedTranscription}`,
-    `Fallback notes: ${summary.fallbackNotes}`,
-    `Log files written: ${summary.logsWritten}`,
-    `Jarvis warnings: ${summary.jarvisWarnings}`,
-  ];
-  if (summaryDetails.length > 0) {
-    summaryLines.push("Details:", ...summaryDetails);
-  }
-
-  logInfo("Summary:");
-  summaryLines.forEach((line) => logInfo(line));
-
-  if (dryRun) {
-    const summaryLogPath = buildSummaryLogPath(tmpDir);
-    logInfo(`[dry-run] Would write summary log: ${summaryLogPath}`);
-  } else {
-    const summaryLogPath = buildSummaryLogPath(tmpDir);
-    await Bun.write(summaryLogPath, `${summaryLines.join("\n")}\n`);
-  }
+  const { outputDir, inputPath, jarvisWarnings, jarvisEdits, dryRun } = options;
 
   const jarvisWarningLogPath = buildJarvisWarningLogPath(outputDir);
   if (dryRun) {
@@ -108,5 +69,54 @@ export async function writeSummaryLogs(options: {
       editLines.push("Files needing edits: none");
     }
     await Bun.write(jarvisEditLogPath, `${editLines.join("\n")}\n`);
+  }
+}
+
+export async function writeSummaryLogs(options: {
+  tmpDir: string;
+  outputDir: string;
+  inputPath: string;
+  summary: ProcessingSummary;
+  summaryDetails: string[];
+  jarvisWarnings: JarvisWarning[];
+  jarvisEdits: JarvisEdit[];
+  dryRun: boolean;
+}) {
+  const {
+    tmpDir,
+    outputDir,
+    inputPath,
+    summary,
+    summaryDetails,
+    jarvisWarnings,
+    jarvisEdits,
+    dryRun,
+  } = options;
+
+  const summaryLines = [
+    `Input: ${inputPath}`,
+    `Output dir: ${outputDir}`,
+    `Chapters selected: ${summary.totalSelected}`,
+    `${dryRun ? "Would process" : "Processed"} chapters: ${summary.processed}`,
+    `Skipped (short initial): ${summary.skippedShortInitial}`,
+    `Skipped (trimmed short): ${summary.skippedShortTrimmed}`,
+    `Skipped (transcription): ${summary.skippedTranscription}`,
+    `Fallback notes: ${summary.fallbackNotes}`,
+    `Log files written: ${summary.logsWritten}`,
+    `Jarvis warnings: ${summary.jarvisWarnings}`,
+  ];
+  if (summaryDetails.length > 0) {
+    summaryLines.push("Details:", ...summaryDetails);
+  }
+
+  logInfo("Summary:");
+  summaryLines.forEach((line) => logInfo(line));
+
+  if (dryRun) {
+    const summaryLogPath = buildSummaryLogPath(tmpDir);
+    logInfo(`[dry-run] Would write summary log: ${summaryLogPath}`);
+  } else {
+    const summaryLogPath = buildSummaryLogPath(tmpDir);
+    await Bun.write(summaryLogPath, `${summaryLines.join("\n")}\n`);
   }
 }

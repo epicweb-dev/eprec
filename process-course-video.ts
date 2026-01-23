@@ -48,7 +48,7 @@ import {
   transcriptIncludesWord,
 } from "./process-course/utils";
 import { refineCommandWindows } from "./process-course/command-handling";
-import { writeSummaryLogs } from "./process-course/summary";
+import { writeSummaryLogs, writeJarvisLogs } from "./process-course/summary";
 import { detectSpeechSegmentsWithVad } from "./speech-detection";
 import { readAudioSamples } from "./process-course/ffmpeg";
 import type {
@@ -622,6 +622,16 @@ async function main() {
     }
   }
 
+  // Always write jarvis logs (summary information)
+  await writeJarvisLogs({
+    outputDir,
+    inputPath,
+    jarvisWarnings,
+    jarvisEdits,
+    dryRun,
+  });
+
+  // Only write detailed summary log when writeLogs is enabled
   if (writeLogs) {
     await writeSummaryLogs({
       tmpDir,
