@@ -55,12 +55,17 @@ type TranscriptWord = {
 };
 
 type TranscriptCommand = {
-  type: "bad-take" | "filename" | "nevermind";
+  type: "bad-take" | "filename" | "nevermind" | "edit";
   value?: string;
   window: TimeRange;
 };
 
 type JarvisWarning = {
+  chapter: Chapter;
+  outputPath: string;
+};
+
+type JarvisEdit = {
   chapter: Chapter;
   outputPath: string;
 };
@@ -203,6 +208,7 @@ async function main() {
   };
   const summaryDetails: string[] = [];
   const jarvisWarnings: JarvisWarning[] = [];
+  const jarvisEdits: JarvisEdit[] = [];
 
   for (const chapter of selectedChapters) {
     const duration = chapter.end - chapter.start;
@@ -320,6 +326,7 @@ async function main() {
       let finalOutputPath = outputBasePath;
       let commandWindows: TimeRange[] = [];
       let commandFilenameOverride: string | null = null;
+      let hasEditCommand = false;
 
       if (enableTranscription) {
         await extractTranscriptionAudio({
@@ -360,6 +367,9 @@ async function main() {
         }
         const hasBadTakeCommand = commands.some(
           (command) => command.type === "bad-take",
+        );
+        hasEditCommand = commands.some(
+          (command) => command.type === "edit",
         );
         const transcriptWordCount = countTranscriptWords(transcript);
         if (transcriptWordCount <= 10 && commands.length === 0) {
@@ -632,6 +642,18 @@ async function main() {
         }
       }
 
+      if (hasEditCommand) {
+        jarvisEdits.push({
+          chapter,
+          outputPath: finalOutputPath,
+        });
+        logInfo(
+          `Edit command detected for chapter ${chapter.index + 1}: ${path.basename(
+            finalOutputPath,
+          )}`,
+        );
+      }
+
       summary.processed += 1;
     } finally {
       if (!keepIntermediates) {
@@ -703,6 +725,30 @@ async function main() {
       warningLines.push("Detected in: none");
     }
     await Bun.write(jarvisWarningLogPath, `${warningLines.join("\n")}\n`);
+  }
+
+  const jarvisEditLogPath = buildJarvisEditLogPath(outputDir);
+  if (dryRun) {
+    logInfo(`[dry-run] Would write jarvis edit log: ${jarvisEditLogPath}`);
+  } else {
+    const editLines = [
+      `Input: ${inputPath}`,
+      `Output dir: ${outputDir}`,
+      `Edit commands: ${jarvisEdits.length}`,
+    ];
+    if (jarvisEdits.length > 0) {
+      editLines.push("Files needing edits:");
+      jarvisEdits.forEach((edit) => {
+        editLines.push(
+          `- Chapter ${edit.chapter.index + 1}: ${edit.chapter.title} -> ${path.basename(
+            edit.outputPath,
+          )}`,
+        );
+      });
+    } else {
+      editLines.push("Files needing edits: none");
+    }
+    await Bun.write(jarvisEditLogPath, `${editLines.join("\n")}\n`);
   }
 }
 
@@ -1830,6 +1876,10 @@ function buildJarvisWarningLogPath(outputDir: string) {
   return path.join(outputDir, "jarvis-warnings.log");
 }
 
+function buildJarvisEditLogPath(outputDir: string) {
+  return path.join(outputDir, "jarvis-edits.log");
+}
+
 function buildChapterLogPath(tmpDir: string, outputPath: string) {
   const parsed = path.parse(outputPath);
   return path.join(tmpDir, `${parsed.name}.log`);
@@ -2038,11 +2088,14 @@ function parseCommand(words: string[], window: TimeRange): TranscriptCommand | n
     }
     return { type: "filename", value, window };
   }
+  if (words[0] === "edit") {
+    return { type: "edit", window };
+  }
   return null;
 }
 
 function isCommandStarter(word: string) {
-  return word === "bad" || word === "filename" || word === "file";
+  return word === "bad" || word === "filename" || word === "file" || word === "edit";
 }
 
 function buildTranscriptWords(segments: TranscriptSegment[]): TranscriptWord[] {
