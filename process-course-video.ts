@@ -45,6 +45,8 @@ type TimeRange = {
   end: number;
 };
 
+type SilenceBoundaryDirection = "before" | "after";
+
 type TranscriptWord = {
   word: string;
   start: number;
@@ -90,6 +92,11 @@ const CONFIG = {
   audioBitrate: "192k",
   commandTrimPaddingSeconds: 0.25,
   commandSpliceReencode: true,
+  commandSilenceSearchSeconds: 0.6,
+  commandSilenceMinDurationMs: 120,
+  commandSilenceRmsWindowMs: 6,
+  commandSilenceRmsThreshold: 0.035,
+  commandSilenceMaxBackwardSeconds: 0.2,
 };
 
 const DEFAULT_MIN_CHAPTER_SECONDS = 15;
@@ -462,6 +469,13 @@ async function main() {
           max: rawDuration,
           paddingSeconds: CONFIG.commandTrimPaddingSeconds,
         });
+        if (commandWindows.length > 0) {
+          commandWindows = await refineCommandWindows({
+            commandWindows,
+            inputPath: normalizedPath,
+            duration: rawDuration,
+          });
+        }
       }
 
       const outputTitle = commandFilenameOverride ?? chapter.title;
@@ -476,6 +490,7 @@ async function main() {
       let adjustedStart = paddedStart;
       let adjustedEnd = paddedEnd;
       let adjustedDuration = trimmedDuration;
+      let splicedDuration: number | null = null;
 
       if (commandWindows.length > 0) {
         const mergedCommandWindows = mergeTimeRanges(commandWindows);
@@ -511,7 +526,7 @@ async function main() {
           sourcePath = splicedPath;
         }
         const removedDuration = sumRangeDuration(mergedCommandWindows);
-        const splicedDuration = rawDuration - removedDuration;
+        splicedDuration = rawDuration - removedDuration;
         adjustedStart = adjustTimeForRemovedRanges(
           paddedStart,
           mergedCommandWindows,
@@ -519,6 +534,35 @@ async function main() {
         adjustedEnd = adjustTimeForRemovedRanges(paddedEnd, mergedCommandWindows);
         adjustedStart = clamp(adjustedStart, 0, splicedDuration);
         adjustedEnd = clamp(adjustedEnd, 0, splicedDuration);
+        adjustedDuration = adjustedEnd - adjustedStart;
+      }
+
+      if (splicedPath && splicedDuration !== null) {
+        const splicedSpeechBounds = await detectSpeechBounds(
+          splicedPath,
+          0,
+          splicedDuration,
+          splicedDuration,
+        );
+        if (splicedSpeechBounds.note) {
+          summary.fallbackNotes += 1;
+          summaryDetails.push(
+            `Fallback after splicing for chapter ${chapter.index + 1}: ${splicedSpeechBounds.note}`,
+          );
+          logInfo(
+            `Speech detection fallback after splicing: ${splicedSpeechBounds.note}`,
+          );
+        }
+        adjustedStart = clamp(
+          splicedSpeechBounds.start - CONFIG.preSpeechPaddingSeconds,
+          0,
+          splicedDuration,
+        );
+        adjustedEnd = clamp(
+          splicedSpeechBounds.end + CONFIG.postSpeechPaddingSeconds,
+          0,
+          splicedDuration,
+        );
         adjustedDuration = adjustedEnd - adjustedStart;
       }
 
@@ -968,6 +1012,348 @@ async function detectSpeechBounds(
   }
 
   return { start: speechStart, end: speechEnd };
+}
+
+async function refineCommandWindows(options: {
+  commandWindows: TimeRange[];
+  inputPath: string;
+  duration: number;
+}) {
+  if (options.commandWindows.length === 0) {
+    return [];
+  }
+  const refined: TimeRange[] = [];
+  for (const window of options.commandWindows) {
+    const shouldKeepStart = await isSilenceAtTarget({
+      inputPath: options.inputPath,
+      duration: options.duration,
+      targetTime: window.start,
+      label: "start",
+    });
+    let refinedStart = shouldKeepStart
+      ? window.start
+      : await findSilenceBoundary({
+          inputPath: options.inputPath,
+          duration: options.duration,
+          targetTime: window.start,
+          direction: "before",
+          maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
+        });
+    if (
+      refinedStart !== null &&
+      window.start - refinedStart > CONFIG.commandSilenceMaxBackwardSeconds
+    ) {
+      refinedStart = window.start;
+    }
+    const shouldKeepEnd = await isSilenceAtTarget({
+      inputPath: options.inputPath,
+      duration: options.duration,
+      targetTime: window.end,
+      label: "end",
+    });
+    const refinedEnd = shouldKeepEnd
+      ? window.end
+      : await findSilenceBoundary({
+          inputPath: options.inputPath,
+          duration: options.duration,
+          targetTime: window.end,
+          direction: "after",
+          maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
+        });
+    const start = clamp(
+      refinedStart ?? window.start,
+      0,
+      options.duration,
+    );
+    const end = clamp(refinedEnd ?? window.end, 0, options.duration);
+    if (end <= start + 0.01) {
+      refined.push({ start: window.start, end: window.end });
+      continue;
+    }
+    if (
+      Math.abs(start - window.start) > 0.01 ||
+      Math.abs(end - window.end) > 0.01
+    ) {
+      logInfo(
+        `Refined command window ${formatSeconds(window.start)}-${formatSeconds(
+          window.end,
+        )} to ${formatSeconds(start)}-${formatSeconds(end)}`,
+      );
+    }
+    refined.push({ start, end });
+  }
+  return mergeTimeRanges(refined);
+}
+
+async function findSilenceBoundary(options: {
+  inputPath: string;
+  duration: number;
+  targetTime: number;
+  direction: SilenceBoundaryDirection;
+  maxSearchSeconds: number;
+}) {
+  const searchStart =
+    options.direction === "before"
+      ? Math.max(0, options.targetTime - options.maxSearchSeconds)
+      : options.targetTime;
+  const searchEnd =
+    options.direction === "before"
+      ? options.targetTime
+      : Math.min(options.duration, options.targetTime + options.maxSearchSeconds);
+  const searchDuration = searchEnd - searchStart;
+  if (searchDuration <= 0.05) {
+    return null;
+  }
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start: searchStart,
+    duration: searchDuration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return null;
+  }
+
+  const targetOffset = options.targetTime - searchStart;
+  let boundary =
+    (await findSilenceBoundaryWithVad({
+      samples,
+      duration: searchDuration,
+      targetOffset,
+      direction: options.direction,
+    })) ??
+    findSilenceBoundaryWithRms({
+      samples,
+      sampleRate: CONFIG.vadSampleRate,
+      direction: options.direction,
+      rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
+      rmsThreshold: CONFIG.commandSilenceRmsThreshold,
+      minSilenceMs: CONFIG.commandSilenceMinDurationMs,
+    });
+  if (boundary === null || !Number.isFinite(boundary)) {
+    return null;
+  }
+  boundary = clamp(boundary, 0, searchDuration);
+  return searchStart + boundary;
+}
+
+async function isSilenceAtTarget(options: {
+  inputPath: string;
+  duration: number;
+  targetTime: number;
+  label?: string;
+}) {
+  const halfWindowSeconds = Math.max(
+    0.005,
+    (CONFIG.commandSilenceRmsWindowMs / 1000) * 1.5,
+  );
+  const windowStart = clamp(
+    options.targetTime - halfWindowSeconds,
+    0,
+    options.duration,
+  );
+  const windowEnd = clamp(
+    options.targetTime + halfWindowSeconds,
+    0,
+    options.duration,
+  );
+  const windowDuration = windowEnd - windowStart;
+  if (windowDuration <= 0.01) {
+    return false;
+  }
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start: windowStart,
+    duration: windowDuration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return false;
+  }
+  const windowSamples = Math.max(
+    1,
+    Math.round((CONFIG.vadSampleRate * CONFIG.commandSilenceRmsWindowMs) / 1000),
+  );
+  const rms = computeRms(samples);
+  const minRms = computeMinWindowRms(samples, windowSamples);
+  const label = options.label ? ` ${options.label}` : "";
+  logInfo(
+    `Command window${label} RMS at ${formatSeconds(options.targetTime)}: avg ${rms.toFixed(
+      4,
+    )}, min ${minRms.toFixed(4)} (threshold ${CONFIG.commandSilenceRmsThreshold})`,
+  );
+  return minRms < CONFIG.commandSilenceRmsThreshold;
+}
+
+async function findSilenceBoundaryWithVad(options: {
+  samples: Float32Array;
+  duration: number;
+  targetOffset: number;
+  direction: SilenceBoundaryDirection;
+}) {
+  try {
+    const vadSegments = await detectSpeechSegmentsWithVad(
+      options.samples,
+      CONFIG.vadSampleRate,
+      CONFIG,
+    );
+    if (vadSegments.length === 0) {
+      return null;
+    }
+    const silenceGaps = buildSilenceGapsFromSpeech(
+      vadSegments,
+      options.duration,
+    );
+    return findSilenceBoundaryFromGaps(
+      silenceGaps,
+      options.targetOffset,
+      options.direction,
+    );
+  } catch (error) {
+    logInfo(
+      `VAD silence scan failed (${options.direction}); using RMS fallback.`,
+    );
+    return null;
+  }
+}
+
+function findSilenceBoundaryWithRms(options: {
+  samples: Float32Array;
+  sampleRate: number;
+  direction: SilenceBoundaryDirection;
+  rmsWindowMs: number;
+  rmsThreshold: number;
+  minSilenceMs: number;
+}) {
+  const windowSamples = Math.max(
+    1,
+    Math.round((options.sampleRate * options.rmsWindowMs) / 1000),
+  );
+  const minSilentWindows = Math.max(
+    1,
+    Math.round(options.minSilenceMs / options.rmsWindowMs),
+  );
+  const totalWindows = Math.floor(options.samples.length / windowSamples);
+  if (totalWindows === 0) {
+    return null;
+  }
+  const isSilent: boolean[] = [];
+  for (let index = 0; index < totalWindows; index += 1) {
+    const offset = index * windowSamples;
+    let sumSquares = 0;
+    for (let i = 0; i < windowSamples; i += 1) {
+      const sample = options.samples[offset + i] ?? 0;
+      sumSquares += sample * sample;
+    }
+    const rms = Math.sqrt(sumSquares / windowSamples);
+    isSilent.push(rms < options.rmsThreshold);
+  }
+
+  const windowSeconds = windowSamples / options.sampleRate;
+  if (options.direction === "before") {
+    let run = 0;
+    for (let index = totalWindows - 1; index >= 0; index -= 1) {
+      if (isSilent[index]) {
+        run += 1;
+        if (run >= minSilentWindows) {
+          const boundaryIndex = index + run;
+          return boundaryIndex * windowSeconds;
+        }
+      } else {
+        run = 0;
+      }
+    }
+  } else {
+    let run = 0;
+    for (let index = 0; index < totalWindows; index += 1) {
+      if (isSilent[index]) {
+        run += 1;
+        if (run >= minSilentWindows) {
+          const runStart = index - run + 1;
+          return runStart * windowSeconds;
+        }
+      } else {
+        run = 0;
+      }
+    }
+  }
+
+  return null;
+}
+
+function computeRms(samples: Float32Array) {
+  if (samples.length === 0) {
+    return 0;
+  }
+  let sumSquares = 0;
+  for (const sample of samples) {
+    sumSquares += sample * sample;
+  }
+  return Math.sqrt(sumSquares / samples.length);
+}
+
+function computeMinWindowRms(samples: Float32Array, windowSamples: number) {
+  if (samples.length === 0 || windowSamples <= 0) {
+    return 0;
+  }
+  if (samples.length <= windowSamples) {
+    return computeRms(samples);
+  }
+  let minRms = Number.POSITIVE_INFINITY;
+  for (let offset = 0; offset + windowSamples <= samples.length; offset += 1) {
+    let sumSquares = 0;
+    for (let i = 0; i < windowSamples; i += 1) {
+      const sample = samples[offset + i] ?? 0;
+      sumSquares += sample * sample;
+    }
+    const rms = Math.sqrt(sumSquares / windowSamples);
+    if (rms < minRms) {
+      minRms = rms;
+    }
+  }
+  return Number.isFinite(minRms) ? minRms : 0;
+}
+
+function buildSilenceGapsFromSpeech(speechSegments: TimeRange[], duration: number) {
+  const gaps: TimeRange[] = [];
+  let cursor = 0;
+  for (const segment of speechSegments) {
+    if (segment.start > cursor) {
+      gaps.push({ start: cursor, end: segment.start });
+    }
+    cursor = Math.max(cursor, segment.end);
+  }
+  if (cursor < duration) {
+    gaps.push({ start: cursor, end: duration });
+  }
+  return gaps.filter((gap) => gap.end > gap.start + 0.001);
+}
+
+function findSilenceBoundaryFromGaps(
+  gaps: TimeRange[],
+  targetOffset: number,
+  direction: SilenceBoundaryDirection,
+) {
+  for (const gap of gaps) {
+    if (targetOffset >= gap.start && targetOffset <= gap.end) {
+      return targetOffset;
+    }
+  }
+  if (direction === "before") {
+    let boundary: number | null = null;
+    for (const gap of gaps) {
+      if (gap.end <= targetOffset + 0.001) {
+        boundary = gap.end;
+      }
+    }
+    return boundary;
+  }
+  for (const gap of gaps) {
+    if (gap.start >= targetOffset - 0.001) {
+      return gap.start;
+    }
+  }
+  return null;
 }
 
 function speechFallback(duration: number, note: string): SpeechBounds {
