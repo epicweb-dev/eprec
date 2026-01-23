@@ -437,6 +437,7 @@ async function main() {
           } else {
             // Command mid-video - need to splice
             splicedPath = buildIntermediatePath(tmpDir, outputBasePath, "spliced");
+            const segmentsWithSpeech: { path: string; range: TimeRange }[] = [];
             for (const [index, range] of keepRanges.entries()) {
               const segmentPath = buildIntermediatePath(
                 tmpDir,
@@ -450,16 +451,45 @@ async function main() {
                 start: range.start,
                 end: range.end,
               });
+              // Check if segment has speech using VAD
+              const segmentDuration = range.end - range.start;
+              const hasSpeech = await checkSegmentHasSpeech(
+                segmentPath,
+                segmentDuration,
+              );
+              if (hasSpeech) {
+                segmentsWithSpeech.push({ path: segmentPath, range });
+              } else {
+                logInfo(
+                  `Splice segment ${index + 1} has no speech, excluding from combined output`,
+                );
+              }
             }
-            await concatSegments({
-              segmentPaths: spliceSegmentPaths,
-              outputPath: splicedPath,
-            });
-            sourcePath = splicedPath;
-            sourceDuration = sumRangeDuration(keepRanges);
-            logInfo(
-              `Spliced ${keepRanges.length} segments, combined duration: ${formatSeconds(sourceDuration)}`,
-            );
+            if (segmentsWithSpeech.length === 0) {
+              throw new Error("All splice segments have no speech.");
+            }
+            if (segmentsWithSpeech.length === 1 && segmentsWithSpeech[0]) {
+              // Only one segment with speech - use it directly without concat
+              sourcePath = segmentsWithSpeech[0].path;
+              sourceDuration = segmentsWithSpeech[0].range.end - segmentsWithSpeech[0].range.start;
+              splicedPath = null; // Don't delete the segment we're using
+              logInfo(
+                `Using single segment with speech, duration: ${formatSeconds(sourceDuration)}`,
+              );
+            } else {
+              await concatSegments({
+                segmentPaths: segmentsWithSpeech.map((s) => s.path),
+                outputPath: splicedPath,
+              });
+              sourcePath = splicedPath;
+              sourceDuration = segmentsWithSpeech.reduce(
+                (total, s) => total + (s.range.end - s.range.start),
+                0,
+              );
+              logInfo(
+                `Spliced ${segmentsWithSpeech.length} segments (of ${keepRanges.length}), combined duration: ${formatSeconds(sourceDuration)}`,
+              );
+            }
           }
         }
       }
@@ -1309,6 +1339,32 @@ function findSilenceBoundaryFromGaps(
 
 function speechFallback(duration: number, note: string): SpeechBounds {
   return { start: 0, end: duration, note };
+}
+
+async function checkSegmentHasSpeech(
+  inputPath: string,
+  duration: number,
+): Promise<boolean> {
+  if (duration <= 0) {
+    return false;
+  }
+
+  const samples = await readAudioSamples({
+    inputPath,
+    start: 0,
+    duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return false;
+  }
+
+  const vadSegments = await detectSpeechSegmentsWithVad(
+    samples,
+    CONFIG.vadSampleRate,
+    CONFIG,
+  );
+  return vadSegments.length > 0;
 }
 
 
