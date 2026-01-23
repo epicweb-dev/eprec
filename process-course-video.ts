@@ -1925,7 +1925,21 @@ function extractTranscriptCommands(
       endIndex += 1;
     }
     const endWord = words[endIndex];
-    if (endIndex >= words.length || !endWord) {
+    if (!endWord) {
+      const tailWords = words
+        .slice(index + 1)
+        .map((item) => item.word)
+        .filter(Boolean);
+      const lastWord = words[words.length - 1];
+      if (tailWords.length > 0 && lastWord) {
+        const command = parseCommand(tailWords, {
+          start: startWord.start,
+          end: lastWord.end,
+        });
+        if (command) {
+          commands.push(command);
+        }
+      }
       break;
     }
     const commandWords = words
