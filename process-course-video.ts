@@ -59,6 +59,11 @@ type TranscriptCommand = {
   window: TimeRange;
 };
 
+type JarvisWarning = {
+  chapter: Chapter;
+  outputPath: string;
+};
+
 type ChapterRange = {
   start: number;
   end: number | null;
@@ -192,8 +197,10 @@ async function main() {
     skippedTranscription: 0,
     fallbackNotes: 0,
     logsWritten: 0,
+    jarvisWarnings: 0,
   };
   const summaryDetails: string[] = [];
+  const jarvisWarnings: JarvisWarning[] = [];
 
   for (const chapter of selectedChapters) {
     const duration = chapter.end - chapter.start;
@@ -224,6 +231,17 @@ async function main() {
     );
     const transcriptionTextPath = `${transcriptionOutputBase}.txt`;
     const transcriptionJsonPath = `${transcriptionOutputBase}.json`;
+    const jarvisTranscriptionAudioPath = buildIntermediateAudioPath(
+      tmpDir,
+      outputBasePath,
+      "jarvis",
+    );
+    const jarvisTranscriptionOutputBase = buildJarvisOutputBase(
+      tmpDir,
+      outputBasePath,
+    );
+    const jarvisTranscriptionTextPath = `${jarvisTranscriptionOutputBase}.txt`;
+    const jarvisTranscriptionJsonPath = `${jarvisTranscriptionOutputBase}.json`;
     const spliceSegmentPaths: string[] = [];
     let splicedPath: string | null = null;
 
@@ -582,6 +600,36 @@ async function main() {
         end: paddedEnd,
       });
 
+      if (!dryRun) {
+        await extractTranscriptionAudio({
+          inputPath: finalOutputPath,
+          outputPath: jarvisTranscriptionAudioPath,
+          start: 0,
+          end: trimmedDuration,
+        });
+        const jarvisTranscription = await transcribeAudio(
+          jarvisTranscriptionAudioPath,
+          {
+            modelPath: whisperModelPath,
+            language: whisperLanguage,
+            binaryPath: whisperBinaryPath,
+            outputBasePath: jarvisTranscriptionOutputBase,
+          },
+        );
+        if (transcriptIncludesWord(jarvisTranscription.text, "jarvis")) {
+          jarvisWarnings.push({
+            chapter,
+            outputPath: finalOutputPath,
+          });
+          summary.jarvisWarnings += 1;
+          logWarn(
+            `Jarvis detected in chapter ${chapter.index + 1}: ${path.basename(
+              finalOutputPath,
+            )}`,
+          );
+        }
+      }
+
       summary.processed += 1;
     } finally {
       if (!keepIntermediates) {
@@ -590,6 +638,9 @@ async function main() {
         await safeUnlink(transcriptionAudioPath);
         await safeUnlink(transcriptionTextPath);
         await safeUnlink(transcriptionJsonPath);
+        await safeUnlink(jarvisTranscriptionAudioPath);
+        await safeUnlink(jarvisTranscriptionTextPath);
+        await safeUnlink(jarvisTranscriptionJsonPath);
         if (splicedPath) {
           await safeUnlink(splicedPath);
         }
@@ -610,6 +661,7 @@ async function main() {
     `Skipped (transcription): ${summary.skippedTranscription}`,
     `Fallback notes: ${summary.fallbackNotes}`,
     `Log files written: ${summary.logsWritten}`,
+    `Jarvis warnings: ${summary.jarvisWarnings}`,
   ];
   if (summaryDetails.length > 0) {
     summaryLines.push("Details:", ...summaryDetails);
@@ -625,6 +677,30 @@ async function main() {
     } else {
       await Bun.write(summaryLogPath, `${summaryLines.join("\n")}\n`);
     }
+  }
+
+  const jarvisWarningLogPath = buildJarvisWarningLogPath(outputDir);
+  if (dryRun) {
+    logInfo(`[dry-run] Would write jarvis warning log: ${jarvisWarningLogPath}`);
+  } else {
+    const warningLines = [
+      `Input: ${inputPath}`,
+      `Output dir: ${outputDir}`,
+      `Jarvis warnings: ${jarvisWarnings.length}`,
+    ];
+    if (jarvisWarnings.length > 0) {
+      warningLines.push("Detected in:");
+      jarvisWarnings.forEach((warning) => {
+        warningLines.push(
+          `- Chapter ${warning.chapter.index + 1}: ${warning.chapter.title} -> ${path.basename(
+            warning.outputPath,
+          )}`,
+        );
+      });
+    } else {
+      warningLines.push("Detected in: none");
+    }
+    await Bun.write(jarvisWarningLogPath, `${warningLines.join("\n")}\n`);
   }
 }
 
@@ -1712,6 +1788,10 @@ function logInfo(message: string) {
   console.log(`[info] ${message}`);
 }
 
+function logWarn(message: string) {
+  console.warn(`[warn] ${message}`);
+}
+
 function buildIntermediatePath(
   tmpDir: string,
   outputPath: string,
@@ -1735,8 +1815,17 @@ function buildTranscriptionOutputBase(tmpDir: string, outputPath: string) {
   return path.join(tmpDir, `${parsed.name}-transcribe`);
 }
 
+function buildJarvisOutputBase(tmpDir: string, outputPath: string) {
+  const parsed = path.parse(outputPath);
+  return path.join(tmpDir, `${parsed.name}-jarvis`);
+}
+
 function buildSummaryLogPath(tmpDir: string) {
   return path.join(tmpDir, "process-summary.log");
+}
+
+function buildJarvisWarningLogPath(outputDir: string) {
+  return path.join(outputDir, "jarvis-warnings.log");
 }
 
 function buildChapterLogPath(tmpDir: string, outputPath: string) {
@@ -1770,6 +1859,14 @@ function countTranscriptWords(transcript: string) {
     return 0;
   }
   return transcript.trim().split(/\s+/).length;
+}
+
+function transcriptIncludesWord(transcript: string, word: string) {
+  if (!transcript.trim()) {
+    return false;
+  }
+  const normalized = normalizeWords(transcript);
+  return normalized.includes(word.toLowerCase());
 }
 
 function scaleTranscriptSegments(
