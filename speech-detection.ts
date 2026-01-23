@@ -1,6 +1,11 @@
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import * as ort from "onnxruntime-node";
+import { readAudioSamples } from "./process-course/ffmpeg";
+import { CONFIG } from "./process-course/config";
+import { formatSeconds } from "./utils";
+import { speechFallback } from "./process-course/utils";
+import type { SpeechBounds } from "./process-course/types";
 
 export type VadConfig = {
   vadWindowSamples: number;
@@ -228,4 +233,75 @@ function probabilitiesToSegments(
     start: speech.start / sampleRate,
     end: speech.end / sampleRate,
   }));
+}
+
+export async function detectSpeechBounds(
+  inputPath: string,
+  chapterStart: number,
+  chapterEnd: number,
+  duration: number,
+): Promise<SpeechBounds> {
+  const clipDuration = chapterEnd - chapterStart;
+  if (clipDuration <= 0) {
+    return speechFallback(duration, "Invalid chapter boundaries; using full chapter.");
+  }
+
+  const samples = await readAudioSamples({
+    inputPath,
+    start: chapterStart,
+    duration: clipDuration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  const fallbackNote = `Speech detection failed near ${formatSeconds(chapterStart)}; using full chapter.`;
+  if (samples.length === 0) {
+    return speechFallback(duration, fallbackNote);
+  }
+
+  const vadSegments = await detectSpeechSegmentsWithVad(
+    samples,
+    CONFIG.vadSampleRate,
+    CONFIG,
+  );
+  if (vadSegments.length === 0) {
+    return speechFallback(duration, fallbackNote);
+  }
+  const firstSegment = vadSegments[0];
+  const lastSegment = vadSegments[vadSegments.length - 1];
+  if (!firstSegment || !lastSegment) {
+    return speechFallback(duration, fallbackNote);
+  }
+  const speechStart = firstSegment.start;
+  const speechEnd = lastSegment.end;
+
+  if (speechEnd <= speechStart + 0.1) {
+    return speechFallback(duration, fallbackNote);
+  }
+
+  return { start: speechStart, end: speechEnd };
+}
+
+export async function checkSegmentHasSpeech(
+  inputPath: string,
+  duration: number,
+): Promise<boolean> {
+  if (duration <= 0) {
+    return false;
+  }
+
+  const samples = await readAudioSamples({
+    inputPath,
+    start: 0,
+    duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return false;
+  }
+
+  const vadSegments = await detectSpeechSegmentsWithVad(
+    samples,
+    CONFIG.vadSampleRate,
+    CONFIG,
+  );
+  return vadSegments.length > 0;
 }
