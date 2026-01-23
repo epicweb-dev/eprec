@@ -286,57 +286,7 @@ async function main() {
         end: rawTrimEnd,
       });
 
-      const speechBounds = await detectSpeechBounds(
-        rawPath,
-        0,
-        rawDuration,
-        rawDuration,
-      );
-
-      if (speechBounds.note) {
-        summary.fallbackNotes += 1;
-        summaryDetails.push(
-          `Fallback for chapter ${chapter.index + 1}: ${speechBounds.note}`,
-        );
-        logInfo(`Speech detection fallback: ${speechBounds.note}`);
-        if (writeLogs) {
-          await writeChapterLog(
-            tmpDir,
-            outputBasePath,
-            [
-              `Chapter: ${chapter.index + 1} - ${chapter.title}`,
-              `Input: ${inputPath}`,
-              `Reason: ${speechBounds.note}`,
-            ],
-          );
-          summary.logsWritten += 1;
-        }
-      }
-
-      const paddedStart = clamp(
-        speechBounds.start - CONFIG.preSpeechPaddingSeconds,
-        0,
-        rawDuration,
-      );
-      const paddedEnd = clamp(
-        speechBounds.end + CONFIG.postSpeechPaddingSeconds,
-        0,
-        rawDuration,
-      );
-      const trimmedDuration = paddedEnd - paddedStart;
-
-      if (paddedEnd <= paddedStart + 0.05) {
-        throw new Error(
-          `Trim window too small for "${chapter.title}" (${paddedStart}s -> ${paddedEnd}s)`,
-        );
-      }
-
-      logInfo(
-        `Speech bounds: ${formatSeconds(speechBounds.start)} -> ${formatSeconds(
-          speechBounds.end,
-        )}, padded to ${formatSeconds(paddedStart)} -> ${formatSeconds(paddedEnd)}`,
-      );
-
+      // Normalize audio before transcription
       const analysis = await analyzeLoudness(rawPath, 0, rawDuration);
 
       await renderChapter({
@@ -346,33 +296,6 @@ async function main() {
         absoluteEnd: rawDuration,
         analysis,
       });
-
-      if (trimmedDuration < minChapterDurationSeconds) {
-        summary.skippedShortTrimmed += 1;
-        summaryDetails.push(
-          `Skipped chapter ${chapter.index + 1} (trimmed ${formatSeconds(
-            trimmedDuration,
-          )} < ${formatSeconds(minChapterDurationSeconds)}).`,
-        );
-        logInfo(
-          `Skipping chapter ${chapter.index + 1}: ${chapter.title} (trimmed ${formatSeconds(
-            trimmedDuration,
-          )})`,
-        );
-        if (writeLogs) {
-          await writeChapterLog(tmpDir, outputBasePath, [
-            `Chapter: ${chapter.index + 1} - ${chapter.title}`,
-            `Input: ${inputPath}`,
-            `Duration: ${formatSeconds(duration)}`,
-            `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
-            `Skip threshold: ${formatSeconds(minChapterDurationSeconds)}`,
-            "Reason: Trimmed duration shorter than minimum duration threshold.",
-          ]);
-          summary.logsWritten += 1;
-        }
-        await safeUnlink(outputBasePath);
-        continue;
-      }
 
       let finalOutputPath = outputBasePath;
       let commandWindows: TimeRange[] = [];
@@ -418,27 +341,6 @@ async function main() {
         const hasBadTakeCommand = commands.some(
           (command) => command.type === "bad-take",
         );
-        if (hasBadTakeCommand) {
-          summary.skippedTranscription += 1;
-          summaryDetails.push(
-            `Skipped chapter ${chapter.index + 1} (bad take command detected).`,
-          );
-          logInfo(
-            `Skipping chapter ${chapter.index + 1}: bad take command detected.`,
-          );
-          if (writeLogs) {
-            await writeChapterLog(tmpDir, outputBasePath, [
-              `Chapter: ${chapter.index + 1} - ${chapter.title}`,
-              `Input: ${inputPath}`,
-              `Duration: ${formatSeconds(duration)}`,
-              `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
-              "Reason: Bad take command detected.",
-            ]);
-            summary.logsWritten += 1;
-          }
-          await safeUnlink(outputBasePath);
-          continue;
-        }
         const transcriptWordCount = countTranscriptWords(transcript);
         if (transcriptWordCount <= 10 && commands.length === 0) {
           summary.skippedTranscription += 1;
@@ -453,9 +355,28 @@ async function main() {
               `Chapter: ${chapter.index + 1} - ${chapter.title}`,
               `Input: ${inputPath}`,
               `Duration: ${formatSeconds(duration)}`,
-              `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
               `Transcript words: ${transcriptWordCount}`,
-              "Reason: Transcript too short for skip phrase check.",
+              "Reason: Transcript too short.",
+            ]);
+            summary.logsWritten += 1;
+          }
+          await safeUnlink(outputBasePath);
+          continue;
+        }
+        if (hasBadTakeCommand) {
+          summary.skippedTranscription += 1;
+          summaryDetails.push(
+            `Skipped chapter ${chapter.index + 1} (bad take command detected).`,
+          );
+          logInfo(
+            `Skipping chapter ${chapter.index + 1}: bad take command detected.`,
+          );
+          if (writeLogs) {
+            await writeChapterLog(tmpDir, outputBasePath, [
+              `Chapter: ${chapter.index + 1} - ${chapter.title}`,
+              `Input: ${inputPath}`,
+              `Duration: ${formatSeconds(duration)}`,
+              "Reason: Bad take command detected.",
             ]);
             summary.logsWritten += 1;
           }
@@ -486,11 +407,9 @@ async function main() {
         )}`,
       );
 
+      // Determine source path and duration after splicing (if any)
       let sourcePath = normalizedPath;
-      let adjustedStart = paddedStart;
-      let adjustedEnd = paddedEnd;
-      let adjustedDuration = trimmedDuration;
-      let splicedDuration: number | null = null;
+      let sourceDuration = rawDuration;
 
       if (commandWindows.length > 0) {
         const mergedCommandWindows = mergeTimeRanges(commandWindows);
@@ -504,78 +423,110 @@ async function main() {
           keepRanges[0].start <= 0.001 &&
           keepRanges[0].end >= rawDuration - 0.001;
         if (!isFullRange) {
-          splicedPath = buildIntermediatePath(tmpDir, outputBasePath, "spliced");
-          for (const [index, range] of keepRanges.entries()) {
-            const segmentPath = buildIntermediatePath(
-              tmpDir,
-              outputBasePath,
-              `splice-${index + 1}`,
+          // Check if command is at end - just trim instead of splicing
+          const isCommandAtEnd =
+            keepRanges.length === 1 &&
+            keepRanges[0] &&
+            keepRanges[0].start <= 0.001;
+          if (isCommandAtEnd && keepRanges[0]) {
+            // Command at end - just trim to keep range
+            sourceDuration = keepRanges[0].end;
+            logInfo(
+              `Command at end - trimming to ${formatSeconds(sourceDuration)}`,
             );
-            spliceSegmentPaths.push(segmentPath);
-            await extractChapterSegmentAccurate({
-              inputPath: normalizedPath,
-              outputPath: segmentPath,
-              start: range.start,
-              end: range.end,
+          } else {
+            // Command mid-video - need to splice
+            splicedPath = buildIntermediatePath(tmpDir, outputBasePath, "spliced");
+            for (const [index, range] of keepRanges.entries()) {
+              const segmentPath = buildIntermediatePath(
+                tmpDir,
+                outputBasePath,
+                `splice-${index + 1}`,
+              );
+              spliceSegmentPaths.push(segmentPath);
+              await extractChapterSegmentAccurate({
+                inputPath: normalizedPath,
+                outputPath: segmentPath,
+                start: range.start,
+                end: range.end,
+              });
+            }
+            await concatSegments({
+              segmentPaths: spliceSegmentPaths,
+              outputPath: splicedPath,
             });
+            sourcePath = splicedPath;
+            sourceDuration = sumRangeDuration(keepRanges);
+            logInfo(
+              `Spliced ${keepRanges.length} segments, combined duration: ${formatSeconds(sourceDuration)}`,
+            );
           }
-          await concatSegments({
-            segmentPaths: spliceSegmentPaths,
-            outputPath: splicedPath,
-          });
-          sourcePath = splicedPath;
         }
-        const removedDuration = sumRangeDuration(mergedCommandWindows);
-        splicedDuration = rawDuration - removedDuration;
-        adjustedStart = adjustTimeForRemovedRanges(
-          paddedStart,
-          mergedCommandWindows,
-        );
-        adjustedEnd = adjustTimeForRemovedRanges(paddedEnd, mergedCommandWindows);
-        adjustedStart = clamp(adjustedStart, 0, splicedDuration);
-        adjustedEnd = clamp(adjustedEnd, 0, splicedDuration);
-        adjustedDuration = adjustedEnd - adjustedStart;
       }
 
-      if (splicedPath && splicedDuration !== null) {
-        const splicedSpeechBounds = await detectSpeechBounds(
-          splicedPath,
-          0,
-          splicedDuration,
-          splicedDuration,
+      // VAD speech bounds on final content
+      const speechBounds = await detectSpeechBounds(
+        sourcePath,
+        0,
+        sourceDuration,
+        sourceDuration,
+      );
+
+      if (speechBounds.note) {
+        summary.fallbackNotes += 1;
+        summaryDetails.push(
+          `Fallback for chapter ${chapter.index + 1}: ${speechBounds.note}`,
         );
-        if (splicedSpeechBounds.note) {
-          summary.fallbackNotes += 1;
-          summaryDetails.push(
-            `Fallback after splicing for chapter ${chapter.index + 1}: ${splicedSpeechBounds.note}`,
+        logInfo(`Speech detection fallback: ${speechBounds.note}`);
+        if (writeLogs) {
+          await writeChapterLog(
+            tmpDir,
+            outputBasePath,
+            [
+              `Chapter: ${chapter.index + 1} - ${chapter.title}`,
+              `Input: ${inputPath}`,
+              `Reason: ${speechBounds.note}`,
+            ],
           );
-          logInfo(
-            `Speech detection fallback after splicing: ${splicedSpeechBounds.note}`,
-          );
+          summary.logsWritten += 1;
         }
-        adjustedStart = clamp(
-          splicedSpeechBounds.start - CONFIG.preSpeechPaddingSeconds,
-          0,
-          splicedDuration,
-        );
-        adjustedEnd = clamp(
-          splicedSpeechBounds.end + CONFIG.postSpeechPaddingSeconds,
-          0,
-          splicedDuration,
-        );
-        adjustedDuration = adjustedEnd - adjustedStart;
       }
 
-      if (adjustedDuration < minChapterDurationSeconds) {
+      // Padded trim window
+      const paddedStart = clamp(
+        speechBounds.start - CONFIG.preSpeechPaddingSeconds,
+        0,
+        sourceDuration,
+      );
+      const paddedEnd = clamp(
+        speechBounds.end + CONFIG.postSpeechPaddingSeconds,
+        0,
+        sourceDuration,
+      );
+      const trimmedDuration = paddedEnd - paddedStart;
+
+      if (paddedEnd <= paddedStart + 0.05) {
+        throw new Error(
+          `Trim window too small for "${chapter.title}" (${paddedStart}s -> ${paddedEnd}s)`,
+        );
+      }
+
+      logInfo(
+        `Speech bounds: ${formatSeconds(speechBounds.start)} -> ${formatSeconds(
+          speechBounds.end,
+        )}, padded to ${formatSeconds(paddedStart)} -> ${formatSeconds(paddedEnd)}`,
+      );
+
+      if (trimmedDuration < minChapterDurationSeconds) {
         summary.skippedShortTrimmed += 1;
         summaryDetails.push(
-          `Skipped chapter ${chapter.index + 1} (spliced ${formatSeconds(
-            adjustedDuration,
+          `Skipped chapter ${chapter.index + 1} (trimmed ${formatSeconds(
+            trimmedDuration,
           )} < ${formatSeconds(minChapterDurationSeconds)}).`,
         );
         logInfo(
-          `Skipping chapter ${chapter.index + 1}: spliced ${formatSeconds(
-            adjustedDuration,
+          `Skipping chapter ${chapter.index + 1}: trimmed ${formatSeconds(
+            trimmedDuration,
           )} < ${formatSeconds(minChapterDurationSeconds)}.`,
         );
         if (writeLogs) {
@@ -584,9 +535,8 @@ async function main() {
             `Input: ${inputPath}`,
             `Duration: ${formatSeconds(duration)}`,
             `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
-            `Spliced duration: ${formatSeconds(adjustedDuration)}`,
             `Skip threshold: ${formatSeconds(minChapterDurationSeconds)}`,
-            "Reason: Spliced duration shorter than minimum duration threshold.",
+            "Reason: Trimmed duration shorter than minimum duration threshold.",
           ]);
           summary.logsWritten += 1;
         }
@@ -594,11 +544,12 @@ async function main() {
         continue;
       }
 
+      // Final chapter output
       await extractChapterSegment({
         inputPath: sourcePath,
         outputPath: finalOutputPath,
-        start: adjustedStart,
-        end: adjustedEnd,
+        start: paddedStart,
+        end: paddedEnd,
       });
 
       summary.processed += 1;
