@@ -102,6 +102,7 @@ const CONFIG = {
   commandSilenceRmsWindowMs: 6,
   commandSilenceRmsThreshold: 0.035,
   commandSilenceMaxBackwardSeconds: 0.2,
+  commandTailMaxSeconds: 12,
 };
 
 const DEFAULT_MIN_CHAPTER_SECONDS = 15;
@@ -1924,23 +1925,24 @@ function extractTranscriptCommands(
     while (endIndex < words.length && words[endIndex]?.word !== closeWord) {
       endIndex += 1;
     }
-    const endWord = words[endIndex];
-    if (!endWord) {
-      const tailWords = words
-        .slice(index + 1)
-        .map((item) => item.word)
-        .filter(Boolean);
-      const lastWord = words[words.length - 1];
-      if (tailWords.length > 0 && lastWord) {
-        const command = parseCommand(tailWords, {
-          start: startWord.start,
-          end: lastWord.end,
-        });
-        if (command) {
-          commands.push(command);
-        }
+    let endWord = words[endIndex];
+    const hasCloseWord = endIndex < words.length && endWord?.word === closeWord;
+    if (!hasCloseWord) {
+      const fallbackEndWord = words[words.length - 1];
+      if (!fallbackEndWord) {
+        break;
       }
-      break;
+      const tailDuration = fallbackEndWord.end - startWord.start;
+      if (tailDuration > CONFIG.commandTailMaxSeconds) {
+        index += 1;
+        continue;
+      }
+      endWord = fallbackEndWord;
+      endIndex = words.length;
+    }
+    if (!endWord) {
+      index += 1;
+      continue;
     }
     const commandWords = words
       .slice(index + 1, endIndex)
@@ -1955,7 +1957,7 @@ function extractTranscriptCommands(
         commands.push(command);
       }
     }
-    index = endIndex + 1;
+    index = hasCloseWord ? endIndex + 1 : words.length;
   }
   return commands;
 }
@@ -2014,6 +2016,9 @@ function normalizeWords(text: string) {
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
   if (!normalized) {
+    return [];
+  }
+  if (normalized === "blank audio" || normalized === "blankaudio") {
     return [];
   }
   const words = normalized

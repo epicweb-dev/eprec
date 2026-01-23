@@ -237,7 +237,7 @@ function getTokenOffsets(token: any): TokenOffsets | null {
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
     return null;
   }
-  if (endMs <= startMs) {
+  if (endMs < startMs) {
     return null;
   }
   return { from: startMs, to: endMs };
