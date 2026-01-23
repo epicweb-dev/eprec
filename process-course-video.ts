@@ -8,6 +8,7 @@ import { detectSpeechSegmentsWithVad } from "./speech-detection";
 import {
   getDefaultWhisperModelPath,
   transcribeAudio,
+  type TranscriptSegment,
 } from "./whispercpp-transcribe";
 
 type Chapter = {
@@ -29,6 +30,23 @@ type SpeechBounds = {
   start: number;
   end: number;
   note?: string;
+};
+
+type TimeRange = {
+  start: number;
+  end: number;
+};
+
+type TranscriptWord = {
+  word: string;
+  start: number;
+  end: number;
+};
+
+type TranscriptCommand = {
+  type: "bad-take" | "filename";
+  value?: string;
+  window: TimeRange;
 };
 
 type ChapterRange = {
@@ -62,10 +80,14 @@ const CONFIG = {
   videoReencodeForAccurateTrim: false,
   audioCodec: "aac",
   audioBitrate: "192k",
+  commandTrimPaddingSeconds: 0.5,
+  commandSpliceReencode: true,
 };
 
 const DEFAULT_MIN_CHAPTER_SECONDS = 15;
 const TRANSCRIPTION_PHRASES = ["jarvis bad take", "bad take jarvis"];
+const COMMAND_WAKE_WORD = "jarvis";
+const COMMAND_CLOSE_WORD = "thanks";
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
 
 async function main() {
@@ -166,22 +188,29 @@ async function main() {
       );
     }
 
-    const outputPath = path.join(
+    const outputBasePath = path.join(
       outputDir,
       `${formatChapterFilename(chapter)}${path.extname(inputPath)}`,
     );
-    const rawPath = buildIntermediatePath(tmpDir, outputPath, "raw");
-    const normalizedPath = buildIntermediatePath(tmpDir, outputPath, "normalized");
+    const rawPath = buildIntermediatePath(tmpDir, outputBasePath, "raw");
+    const normalizedPath = buildIntermediatePath(
+      tmpDir,
+      outputBasePath,
+      "normalized",
+    );
     const transcriptionAudioPath = buildIntermediateAudioPath(
       tmpDir,
-      outputPath,
+      outputBasePath,
       "transcribe",
     );
     const transcriptionOutputBase = buildTranscriptionOutputBase(
       tmpDir,
-      outputPath,
+      outputBasePath,
     );
     const transcriptionTextPath = `${transcriptionOutputBase}.txt`;
+    const transcriptionJsonPath = `${transcriptionOutputBase}.json`;
+    const spliceSegmentPaths: string[] = [];
+    let splicedPath: string | null = null;
 
     if (duration < minChapterDurationSeconds) {
       summary.skippedShortInitial += 1;
@@ -198,10 +227,10 @@ async function main() {
       if (writeLogs) {
         if (dryRun) {
           logInfo(
-            `[dry-run] Would write log: ${buildChapterLogPath(tmpDir, outputPath)}`,
+            `[dry-run] Would write log: ${buildChapterLogPath(tmpDir, outputBasePath)}`,
           );
         } else {
-          await writeChapterLog(tmpDir, outputPath, [
+          await writeChapterLog(tmpDir, outputBasePath, [
             `Chapter: ${chapter.index + 1} - ${chapter.title}`,
             `Input: ${inputPath}`,
             `Duration: ${formatSeconds(duration)}`,
@@ -258,7 +287,7 @@ async function main() {
         if (writeLogs) {
           await writeChapterLog(
             tmpDir,
-            outputPath,
+            outputBasePath,
             [
               `Chapter: ${chapter.index + 1} - ${chapter.title}`,
               `Input: ${inputPath}`,
@@ -316,7 +345,7 @@ async function main() {
           )})`,
         );
         if (writeLogs) {
-          await writeChapterLog(tmpDir, outputPath, [
+          await writeChapterLog(tmpDir, outputBasePath, [
             `Chapter: ${chapter.index + 1} - ${chapter.title}`,
             `Input: ${inputPath}`,
             `Duration: ${formatSeconds(duration)}`,
@@ -326,25 +355,73 @@ async function main() {
           ]);
           summary.logsWritten += 1;
         }
-        await safeUnlink(outputPath);
+        await safeUnlink(outputBasePath);
         continue;
       }
+
+      let finalOutputPath = outputBasePath;
+      let commandWindows: TimeRange[] = [];
+      let commandFilenameOverride: string | null = null;
 
       if (enableTranscription) {
         await extractTranscriptionAudio({
           inputPath: normalizedPath,
           outputPath: transcriptionAudioPath,
-          start: paddedStart,
-          end: paddedEnd,
+          start: 0,
+          end: rawDuration,
         });
-        const transcript = await transcribeAudio(transcriptionAudioPath, {
-          modelPath: whisperModelPath,
-          language: whisperLanguage,
-          binaryPath: whisperBinaryPath,
-          outputBasePath: transcriptionOutputBase,
+        const transcriptionResult = await transcribeAudio(
+          transcriptionAudioPath,
+          {
+            modelPath: whisperModelPath,
+            language: whisperLanguage,
+            binaryPath: whisperBinaryPath,
+            outputBasePath: transcriptionOutputBase,
+          },
+        );
+        const transcript = transcriptionResult.text;
+        const commands = extractTranscriptCommands(transcriptionResult.segments, {
+          wakeWord: COMMAND_WAKE_WORD,
+          closeWord: COMMAND_CLOSE_WORD,
         });
+        if (commands.length > 0) {
+          logInfo(
+            `Commands detected: ${commands.map((command) => command.type).join(", ")}`,
+          );
+        }
+        const filenameCommand = commands.find(
+          (command) => command.type === "filename" && command.value?.trim(),
+        );
+        if (filenameCommand?.value) {
+          commandFilenameOverride = filenameCommand.value;
+          logInfo(`Filename command: ${commandFilenameOverride}`);
+        }
+        const hasBadTakeCommand = commands.some(
+          (command) => command.type === "bad-take",
+        );
+        if (hasBadTakeCommand) {
+          summary.skippedTranscription += 1;
+          summaryDetails.push(
+            `Skipped chapter ${chapter.index + 1} (bad take command detected).`,
+          );
+          logInfo(
+            `Skipping chapter ${chapter.index + 1}: bad take command detected.`,
+          );
+          if (writeLogs) {
+            await writeChapterLog(tmpDir, outputBasePath, [
+              `Chapter: ${chapter.index + 1} - ${chapter.title}`,
+              `Input: ${inputPath}`,
+              `Duration: ${formatSeconds(duration)}`,
+              `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
+              "Reason: Bad take command detected.",
+            ]);
+            summary.logsWritten += 1;
+          }
+          await safeUnlink(outputBasePath);
+          continue;
+        }
         const transcriptWordCount = countTranscriptWords(transcript);
-        if (transcriptWordCount <= 10) {
+        if (transcriptWordCount <= 10 && commands.length === 0) {
           summary.skippedTranscription += 1;
           summaryDetails.push(
             `Skipped chapter ${chapter.index + 1} (transcript too short).`,
@@ -353,7 +430,7 @@ async function main() {
             `Skipping chapter ${chapter.index + 1}: transcript too short (${transcriptWordCount} words).`,
           );
           if (writeLogs) {
-            await writeChapterLog(tmpDir, outputPath, [
+            await writeChapterLog(tmpDir, outputBasePath, [
               `Chapter: ${chapter.index + 1} - ${chapter.title}`,
               `Input: ${inputPath}`,
               `Duration: ${formatSeconds(duration)}`,
@@ -363,7 +440,7 @@ async function main() {
             ]);
             summary.logsWritten += 1;
           }
-          await safeUnlink(outputPath);
+          await safeUnlink(outputBasePath);
           continue;
         }
 
@@ -376,7 +453,7 @@ async function main() {
             `Skipping chapter ${chapter.index + 1}: transcription matched skip phrase.`,
           );
           if (writeLogs) {
-            await writeChapterLog(tmpDir, outputPath, [
+            await writeChapterLog(tmpDir, outputBasePath, [
               `Chapter: ${chapter.index + 1} - ${chapter.title}`,
               `Input: ${inputPath}`,
               `Duration: ${formatSeconds(duration)}`,
@@ -385,16 +462,109 @@ async function main() {
             ]);
             summary.logsWritten += 1;
           }
-          await safeUnlink(outputPath);
+          await safeUnlink(outputBasePath);
           continue;
         }
+
+        commandWindows = buildCommandWindows(commands, {
+          offset: 0,
+          min: 0,
+          max: rawDuration,
+          paddingSeconds: CONFIG.commandTrimPaddingSeconds,
+        });
+      }
+
+      const outputTitle = commandFilenameOverride ?? chapter.title;
+      finalOutputPath = path.join(
+        outputDir,
+        `${formatChapterFilename({ ...chapter, title: outputTitle })}${path.extname(
+          inputPath,
+        )}`,
+      );
+
+      let sourcePath = normalizedPath;
+      let adjustedStart = paddedStart;
+      let adjustedEnd = paddedEnd;
+      let adjustedDuration = trimmedDuration;
+
+      if (commandWindows.length > 0) {
+        const mergedCommandWindows = mergeTimeRanges(commandWindows);
+        const keepRanges = buildKeepRanges(0, rawDuration, mergedCommandWindows);
+        if (keepRanges.length === 0) {
+          throw new Error("Command windows removed entire chapter.");
+        }
+        const isFullRange =
+          keepRanges.length === 1 &&
+          keepRanges[0] &&
+          keepRanges[0].start <= 0.001 &&
+          keepRanges[0].end >= rawDuration - 0.001;
+        if (!isFullRange) {
+          splicedPath = buildIntermediatePath(tmpDir, outputBasePath, "spliced");
+          for (const [index, range] of keepRanges.entries()) {
+            const segmentPath = buildIntermediatePath(
+              tmpDir,
+              outputBasePath,
+              `splice-${index + 1}`,
+            );
+            spliceSegmentPaths.push(segmentPath);
+            await extractChapterSegment({
+              inputPath: normalizedPath,
+              outputPath: segmentPath,
+              start: range.start,
+              end: range.end,
+            });
+          }
+          await concatSegments({
+            segmentPaths: spliceSegmentPaths,
+            outputPath: splicedPath,
+          });
+          sourcePath = splicedPath;
+        }
+        const removedDuration = sumRangeDuration(mergedCommandWindows);
+        const splicedDuration = rawDuration - removedDuration;
+        adjustedStart = adjustTimeForRemovedRanges(
+          paddedStart,
+          mergedCommandWindows,
+        );
+        adjustedEnd = adjustTimeForRemovedRanges(paddedEnd, mergedCommandWindows);
+        adjustedStart = clamp(adjustedStart, 0, splicedDuration);
+        adjustedEnd = clamp(adjustedEnd, 0, splicedDuration);
+        adjustedDuration = adjustedEnd - adjustedStart;
+      }
+
+      if (adjustedDuration < minChapterDurationSeconds) {
+        summary.skippedShortTrimmed += 1;
+        summaryDetails.push(
+          `Skipped chapter ${chapter.index + 1} (spliced ${formatSeconds(
+            adjustedDuration,
+          )} < ${formatSeconds(minChapterDurationSeconds)}).`,
+        );
+        logInfo(
+          `Skipping chapter ${chapter.index + 1}: spliced ${formatSeconds(
+            adjustedDuration,
+          )} < ${formatSeconds(minChapterDurationSeconds)}.`,
+        );
+        if (writeLogs) {
+          await writeChapterLog(tmpDir, outputBasePath, [
+            `Chapter: ${chapter.index + 1} - ${chapter.title}`,
+            `Input: ${inputPath}`,
+            `Duration: ${formatSeconds(duration)}`,
+            `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
+            `Spliced duration: ${formatSeconds(adjustedDuration)}`,
+            `Skip threshold: ${formatSeconds(minChapterDurationSeconds)}`,
+            "Reason: Spliced duration shorter than minimum duration threshold.",
+          ]);
+          summary.logsWritten += 1;
+        }
+        await safeUnlink(outputBasePath);
+        continue;
       }
 
       await extractChapterSegment({
-        inputPath: normalizedPath,
-        outputPath,
-        start: paddedStart,
-        end: paddedEnd,
+        inputPath: sourcePath,
+        outputPath: finalOutputPath,
+        start: adjustedStart,
+        end: adjustedEnd,
       });
 
       summary.processed += 1;
@@ -404,6 +574,13 @@ async function main() {
         await safeUnlink(normalizedPath);
         await safeUnlink(transcriptionAudioPath);
         await safeUnlink(transcriptionTextPath);
+        await safeUnlink(transcriptionJsonPath);
+        if (splicedPath) {
+          await safeUnlink(splicedPath);
+        }
+        for (const segmentPath of spliceSegmentPaths) {
+          await safeUnlink(segmentPath);
+        }
       }
     }
   }
@@ -1216,6 +1393,246 @@ function countTranscriptWords(transcript: string) {
     return 0;
   }
   return transcript.trim().split(/\s+/).length;
+}
+
+function extractTranscriptCommands(
+  segments: TranscriptSegment[],
+  options: { wakeWord: string; closeWord: string },
+): TranscriptCommand[] {
+  const words = buildTranscriptWords(segments);
+  if (words.length === 0) {
+    return [];
+  }
+  const commands: TranscriptCommand[] = [];
+  const wakeWord = options.wakeWord.toLowerCase();
+  const closeWord = options.closeWord.toLowerCase();
+  let index = 0;
+  while (index < words.length) {
+    const startWord = words[index];
+    if (!startWord || startWord.word !== wakeWord) {
+      index += 1;
+      continue;
+    }
+    const nextWord = words[index + 1];
+    if (!nextWord || !isCommandStarter(nextWord.word)) {
+      index += 1;
+      continue;
+    }
+    let endIndex = index + 1;
+    while (endIndex < words.length && words[endIndex]?.word !== closeWord) {
+      endIndex += 1;
+    }
+    const endWord = words[endIndex];
+    if (endIndex >= words.length || !endWord) {
+      break;
+    }
+    const commandWords = words
+      .slice(index + 1, endIndex)
+      .map((item) => item.word)
+      .filter(Boolean);
+    if (commandWords.length > 0) {
+      const command = parseCommand(commandWords, {
+        start: startWord.start,
+        end: endWord.end,
+      });
+      if (command) {
+        commands.push(command);
+      }
+    }
+    index = endIndex + 1;
+  }
+  return commands;
+}
+
+function parseCommand(words: string[], window: TimeRange): TranscriptCommand | null {
+  if (words.length >= 2 && words[0] === "bad" && words[1] === "take") {
+    return { type: "bad-take", window };
+  }
+  if (words[0] === "filename") {
+    const value = words.slice(1).join(" ").trim();
+    if (!value) {
+      return null;
+    }
+    return { type: "filename", value, window };
+  }
+  if (words.length >= 2 && words[0] === "file" && words[1] === "name") {
+    const value = words.slice(2).join(" ").trim();
+    if (!value) {
+      return null;
+    }
+    return { type: "filename", value, window };
+  }
+  return null;
+}
+
+function isCommandStarter(word: string) {
+  return word === "bad" || word === "filename" || word === "file";
+}
+
+function buildTranscriptWords(segments: TranscriptSegment[]): TranscriptWord[] {
+  const words: TranscriptWord[] = [];
+  const ordered = [...segments].sort((a, b) => a.start - b.start);
+  for (const segment of ordered) {
+    const segmentWords = normalizeWords(segment.text);
+    if (segmentWords.length === 0) {
+      continue;
+    }
+    const segmentDuration = Math.max(segment.end - segment.start, 0);
+    const wordDuration =
+      segmentWords.length > 0 ? segmentDuration / segmentWords.length : 0;
+    for (const [index, word] of segmentWords.entries()) {
+      const start = segment.start + wordDuration * index;
+      const end =
+        index === segmentWords.length - 1
+          ? segment.end
+          : segment.start + wordDuration * (index + 1);
+      words.push({ word, start, end });
+    }
+  }
+  return words;
+}
+
+function normalizeWords(text: string) {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!normalized) {
+    return [];
+  }
+  return normalized.split(/\s+/).filter(Boolean);
+}
+
+function buildCommandWindows(
+  commands: TranscriptCommand[],
+  options: { offset: number; min: number; max: number; paddingSeconds: number },
+) {
+  if (commands.length === 0) {
+    return [];
+  }
+  const windows = commands
+    .map((command) => {
+      const start = clamp(
+        options.offset + command.window.start - options.paddingSeconds,
+        options.min,
+        options.max,
+      );
+      const end = clamp(
+        options.offset + command.window.end + options.paddingSeconds,
+        options.min,
+        options.max,
+      );
+      if (end <= start) {
+        return null;
+      }
+      return { start, end };
+    })
+    .filter((window): window is TimeRange => Boolean(window));
+  return mergeTimeRanges(windows);
+}
+
+function mergeTimeRanges(ranges: TimeRange[]) {
+  if (ranges.length === 0) {
+    return [];
+  }
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  const merged: TimeRange[] = [];
+  let current = sorted[0];
+  if (!current) {
+    return [];
+  }
+  for (const range of sorted.slice(1)) {
+    if (range.start <= current.end + 0.01) {
+      current = { start: current.start, end: Math.max(current.end, range.end) };
+    } else {
+      merged.push(current);
+      current = range;
+    }
+  }
+  merged.push(current);
+  return merged;
+}
+
+function buildKeepRanges(
+  start: number,
+  end: number,
+  exclude: TimeRange[],
+): TimeRange[] {
+  if (exclude.length === 0) {
+    return [{ start, end }];
+  }
+  const ranges: TimeRange[] = [];
+  let cursor = start;
+  for (const window of mergeTimeRanges(exclude)) {
+    if (window.end <= cursor) {
+      continue;
+    }
+    if (window.start > cursor) {
+      ranges.push({ start: cursor, end: window.start });
+    }
+    cursor = Math.max(cursor, window.end);
+  }
+  if (cursor < end) {
+    ranges.push({ start: cursor, end });
+  }
+  return ranges.filter((range) => range.end > range.start);
+}
+
+function sumRangeDuration(ranges: TimeRange[]) {
+  return ranges.reduce((total, range) => total + (range.end - range.start), 0);
+}
+
+function adjustTimeForRemovedRanges(time: number, removed: TimeRange[]) {
+  if (removed.length === 0) {
+    return time;
+  }
+  let adjusted = time;
+  for (const range of mergeTimeRanges(removed)) {
+    if (range.end <= time) {
+      adjusted -= range.end - range.start;
+      continue;
+    }
+    if (range.start < time && range.end > time) {
+      adjusted -= time - range.start;
+      break;
+    }
+    break;
+  }
+  return adjusted;
+}
+
+async function concatSegments(options: {
+  segmentPaths: string[];
+  outputPath: string;
+}) {
+  if (options.segmentPaths.length < 2) {
+    throw new Error("Splice requires at least two segments to concat.");
+  }
+  const args = ["ffmpeg", "-hide_banner", "-y"];
+  for (const segmentPath of options.segmentPaths) {
+    args.push("-i", segmentPath);
+  }
+  const inputLabels = options.segmentPaths
+    .map((_, index) => `[${index}:v:0][${index}:a:0]`)
+    .join("");
+  const concatFilter = `${inputLabels}concat=n=${options.segmentPaths.length}:v=1:a=1[v][a]`;
+  const filter = `${concatFilter};[a]aresample=async=1:first_pts=0[aout]`;
+  args.push(
+    "-filter_complex",
+    filter,
+    "-map",
+    "[v]",
+    "-map",
+    "[aout]",
+  );
+  if (CONFIG.commandSpliceReencode) {
+    args.push("-c:v", "libx264", "-preset", "medium", "-crf", "18");
+  } else {
+    args.push("-c:v", "copy");
+  }
+  args.push("-c:a", CONFIG.audioCodec, "-b:a", CONFIG.audioBitrate);
+  args.push(options.outputPath);
+  await runCommand(args);
 }
 
 async function writeChapterLog(

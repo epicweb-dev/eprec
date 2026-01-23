@@ -15,6 +15,17 @@ type TranscribeOptions = {
   outputBasePath?: string;
 };
 
+export type TranscriptSegment = {
+  start: number;
+  end: number;
+  text: string;
+};
+
+export type TranscriptionResult = {
+  text: string;
+  segments: TranscriptSegment[];
+};
+
 export function getDefaultWhisperModelPath() {
   return path.resolve(".cache", "whispercpp", DEFAULT_MODEL_FILENAME);
 }
@@ -22,7 +33,7 @@ export function getDefaultWhisperModelPath() {
 export async function transcribeAudio(
   audioPath: string,
   options: TranscribeOptions = {},
-) {
+): Promise<TranscriptionResult> {
   const resolvedAudioPath = path.resolve(audioPath);
   const resolvedModelPath = path.resolve(
     options.modelPath ?? getDefaultWhisperModelPath(),
@@ -47,6 +58,9 @@ export async function transcribeAudio(
     "-l",
     language,
     "-nt",
+    "-ml",
+    "1",
+    "-oj",
     "-otxt",
     "-of",
     outputBasePath,
@@ -58,9 +72,10 @@ export async function transcribeAudio(
 
   const result = await runCommand(args);
   const transcriptPath = `${outputBasePath}.txt`;
-  const transcript = await readTranscript(transcriptPath, result.stdout);
-  const normalized = transcript.replace(/\s+/g, " ").trim().toLowerCase();
-  return normalized;
+  const transcript = await readTranscriptText(transcriptPath, result.stdout);
+  const segments = await readTranscriptSegments(`${outputBasePath}.json`);
+  const normalized = normalizeTranscriptText(transcript);
+  return { text: normalized, segments };
 }
 
 async function ensureModelFile(modelPath: string) {
@@ -86,7 +101,7 @@ async function ensureModelFile(modelPath: string) {
   await Bun.write(modelPath, bytes);
 }
 
-async function readTranscript(transcriptPath: string, fallback: string) {
+async function readTranscriptText(transcriptPath: string, fallback: string) {
   const transcriptFile = Bun.file(transcriptPath);
   if (await transcriptFile.exists()) {
     return transcriptFile.text();
@@ -95,6 +110,132 @@ async function readTranscript(transcriptPath: string, fallback: string) {
     return fallback;
   }
   throw new Error("Whisper.cpp transcript output was empty.");
+}
+
+async function readTranscriptSegments(
+  transcriptPath: string,
+): Promise<TranscriptSegment[]> {
+  const transcriptFile = Bun.file(transcriptPath);
+  if (!(await transcriptFile.exists())) {
+    return [];
+  }
+  const raw = await transcriptFile.text();
+  try {
+    const payload = JSON.parse(raw);
+    return parseTranscriptSegments(payload);
+  } catch (error) {
+    throw new Error(
+      `Failed to parse whisper.cpp JSON transcript: ${error instanceof Error ? error.message : error}`,
+    );
+  }
+}
+
+function parseTranscriptSegments(payload: unknown): TranscriptSegment[] {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+  const segments = parseSegmentsArray((payload as any).segments);
+  if (segments.length > 0) {
+    return segments.sort((a, b) => a.start - b.start);
+  }
+  const transcriptionSegments = parseTranscriptionArray(
+    (payload as any).transcription,
+  );
+  return transcriptionSegments.sort((a, b) => a.start - b.start);
+}
+
+function parseSegmentsArray(rawSegments: unknown): TranscriptSegment[] {
+  if (!Array.isArray(rawSegments)) {
+    return [];
+  }
+  return rawSegments
+    .map((segment: any) => {
+      const times = getSegmentTimes(segment);
+      if (!times) {
+        return null;
+      }
+      const text =
+        typeof segment.text === "string"
+          ? segment.text
+          : typeof segment.transcript === "string"
+            ? segment.transcript
+            : "";
+      if (!text.trim()) {
+        return null;
+      }
+      return {
+        start: times.start,
+        end: times.end,
+        text: text.trim(),
+      } satisfies TranscriptSegment;
+    })
+    .filter((segment): segment is TranscriptSegment => Boolean(segment));
+}
+
+function parseTranscriptionArray(rawTranscription: unknown): TranscriptSegment[] {
+  if (!Array.isArray(rawTranscription)) {
+    return [];
+  }
+  return rawTranscription
+    .map((segment: any) => {
+      if (!segment || typeof segment !== "object") {
+        return null;
+      }
+      const offsets = (segment as any).offsets;
+      if (!offsets || typeof offsets !== "object") {
+        return null;
+      }
+      const startMs = Number((offsets as any).from);
+      const endMs = Number((offsets as any).to);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+        return null;
+      }
+      if (endMs <= startMs) {
+        return null;
+      }
+      const text = typeof (segment as any).text === "string" ? (segment as any).text : "";
+      if (!text.trim()) {
+        return null;
+      }
+      return {
+        start: startMs / 1000,
+        end: endMs / 1000,
+        text: text.trim(),
+      } satisfies TranscriptSegment;
+    })
+    .filter((segment): segment is TranscriptSegment => Boolean(segment));
+}
+
+function getSegmentTimes(segment: any): { start: number; end: number } | null {
+  if (
+    segment &&
+    typeof segment.start === "number" &&
+    typeof segment.end === "number"
+  ) {
+    if (segment.end > segment.start) {
+      return { start: segment.start, end: segment.end };
+    }
+  }
+  if (
+    segment &&
+    typeof segment.t0 === "number" &&
+    typeof segment.t1 === "number"
+  ) {
+    const start = segment.t0 * 0.01;
+    const end = segment.t1 * 0.01;
+    if (end > start) {
+      return { start, end };
+    }
+  }
+  return null;
+}
+
+function normalizeTranscriptText(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function runCommand(command: string[]) {
