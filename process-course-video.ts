@@ -865,7 +865,7 @@ function parseCliArgs() {
   const outputDir =
     typeof argv.outputDir === "string" && argv.outputDir.trim().length > 0
       ? argv.outputDir
-      : path.parse(inputPath).name;
+      : path.join(path.dirname(inputPath), path.parse(inputPath).name);
 
   const minChapterDurationSeconds = Number(argv["min-chapter-seconds"]);
   if (
