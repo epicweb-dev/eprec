@@ -55,7 +55,7 @@ type TranscriptWord = {
 };
 
 type TranscriptCommand = {
-  type: "bad-take" | "filename";
+  type: "bad-take" | "filename" | "nevermind";
   value?: string;
   window: TimeRange;
 };
@@ -1919,6 +1919,62 @@ function extractTranscriptCommands(
       continue;
     }
     const nextWord = words[index + 1];
+    // Check for nevermind cancellation pattern: jarvis ... nevermind ... thanks
+    if (nextWord) {
+      let nevermindIndex = index + 1;
+      let foundNevermind = false;
+      while (nevermindIndex < words.length) {
+        const word = words[nevermindIndex];
+        if (!word) {
+          break;
+        }
+        // Check for "nevermind" as one word
+        if (word.word === "nevermind") {
+          foundNevermind = true;
+          break;
+        }
+        // Check for "never mind" as two consecutive words
+        if (word.word === "never" && nevermindIndex + 1 < words.length) {
+          const nextWordAfterNever = words[nevermindIndex + 1];
+          if (nextWordAfterNever && nextWordAfterNever.word === "mind") {
+            foundNevermind = true;
+            break;
+          }
+        }
+        if (word.word === closeWord) {
+          break;
+        }
+        nevermindIndex += 1;
+      }
+      if (foundNevermind) {
+        // Look for the close word after nevermind
+        // If nevermind was two words, skip past both
+        const searchStartIndex =
+          words[nevermindIndex]?.word === "never" &&
+          nevermindIndex + 1 < words.length &&
+          words[nevermindIndex + 1]?.word === "mind"
+            ? nevermindIndex + 2
+            : nevermindIndex + 1;
+        let endIndex = searchStartIndex;
+        while (endIndex < words.length && words[endIndex]?.word !== closeWord) {
+          endIndex += 1;
+        }
+        const endWord = words[endIndex];
+        if (endWord && endWord.word === closeWord) {
+          // Found jarvis ... nevermind ... thanks pattern - remove it
+          commands.push({
+            type: "nevermind",
+            window: {
+              start: startWord.start,
+              end: endWord.end,
+            },
+          });
+          index = endIndex + 1;
+          continue;
+        }
+      }
+    }
+    // Check for regular commands with command starters
     if (!nextWord || !isCommandStarter(nextWord.word)) {
       index += 1;
       continue;
