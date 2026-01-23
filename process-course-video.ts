@@ -10,6 +10,14 @@ import {
   transcribeAudio,
   type TranscriptSegment,
 } from "./whispercpp-transcribe";
+import {
+  clamp,
+  formatCommand,
+  formatSeconds,
+  runCommand as runCommandBase,
+  runCommandBinary as runCommandBinaryBase,
+  toKebabCase,
+} from "./utils";
 
 type Chapter = {
   index: number;
@@ -80,7 +88,7 @@ const CONFIG = {
   videoReencodeForAccurateTrim: false,
   audioCodec: "aac",
   audioBitrate: "192k",
-  commandTrimPaddingSeconds: 0.5,
+  commandTrimPaddingSeconds: 0.25,
   commandSpliceReencode: true,
 };
 
@@ -380,7 +388,11 @@ async function main() {
           },
         );
         const transcript = transcriptionResult.text;
-        const commands = extractTranscriptCommands(transcriptionResult.segments, {
+        const scaledSegments =
+          transcriptionResult.segmentsSource === "tokens"
+            ? transcriptionResult.segments
+            : scaleTranscriptSegments(transcriptionResult.segments, rawDuration);
+        const commands = extractTranscriptCommands(scaledSegments, {
           wakeWord: COMMAND_WAKE_WORD,
           closeWord: COMMAND_CLOSE_WORD,
         });
@@ -444,28 +456,6 @@ async function main() {
           continue;
         }
 
-        if (matchesTranscriptionPhrase(transcript, whisperSkipPhrases)) {
-          summary.skippedTranscription += 1;
-          summaryDetails.push(
-            `Skipped chapter ${chapter.index + 1} (transcription phrase detected).`,
-          );
-          logInfo(
-            `Skipping chapter ${chapter.index + 1}: transcription matched skip phrase.`,
-          );
-          if (writeLogs) {
-            await writeChapterLog(tmpDir, outputBasePath, [
-              `Chapter: ${chapter.index + 1} - ${chapter.title}`,
-              `Input: ${inputPath}`,
-              `Duration: ${formatSeconds(duration)}`,
-              `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
-              "Reason: Transcription matched skip phrase.",
-            ]);
-            summary.logsWritten += 1;
-          }
-          await safeUnlink(outputBasePath);
-          continue;
-        }
-
         commandWindows = buildCommandWindows(commands, {
           offset: 0,
           min: 0,
@@ -507,7 +497,7 @@ async function main() {
               `splice-${index + 1}`,
             );
             spliceSegmentPaths.push(segmentPath);
-            await extractChapterSegment({
+            await extractChapterSegmentAccurate({
               inputPath: normalizedPath,
               outputPath: segmentPath,
               start: range.start,
@@ -1221,6 +1211,58 @@ async function extractChapterSegment(options: {
   await runCommand(args);
 }
 
+async function extractChapterSegmentAccurate(options: {
+  inputPath: string;
+  outputPath: string;
+  start: number;
+  end: number;
+}) {
+  const clipDuration = options.end - options.start;
+  if (clipDuration <= 0) {
+    throw new Error(
+      `Invalid segment window (${formatSeconds(options.start)} -> ${formatSeconds(
+        options.end,
+      )})`,
+    );
+  }
+
+  const args = [
+    "ffmpeg",
+    "-hide_banner",
+    "-y",
+    "-i",
+    options.inputPath,
+    "-ss",
+    options.start.toFixed(3),
+    "-t",
+    clipDuration.toFixed(3),
+    "-dn",
+    "-map_chapters",
+    "-1",
+    "-map",
+    "0:v?",
+    "-map",
+    "0:a?",
+    "-map",
+    "0:s?",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "medium",
+    "-crf",
+    "18",
+    "-c:a",
+    CONFIG.audioCodec,
+    "-b:a",
+    CONFIG.audioBitrate,
+    "-c:s",
+    "copy",
+    options.outputPath,
+  ];
+
+  await runCommand(args);
+}
+
 async function extractTranscriptionAudio(options: {
   inputPath: string;
   outputPath: string;
@@ -1262,51 +1304,11 @@ async function extractTranscriptionAudio(options: {
 }
 
 async function runCommand(command: string[], allowFailure = false) {
-  logCommand(command);
-  const proc = Bun.spawn(command, {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  if (exitCode !== 0 && !allowFailure) {
-    throw new Error(
-      `Command failed (${exitCode}): ${formatCommand(command)}\n${stderr}`,
-    );
-  }
-
-  return { stdout, stderr, exitCode };
+  return runCommandBase(command, { allowFailure, logCommand });
 }
 
 async function runCommandBinary(command: string[], allowFailure = false) {
-  logCommand(command);
-  const proc = Bun.spawn(command, {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).arrayBuffer(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  if (exitCode !== 0 && !allowFailure) {
-    throw new Error(
-      `Command failed (${exitCode}): ${formatCommand(command)}\n${stderr}`,
-    );
-  }
-
-  return { stdout: new Uint8Array(stdout), stderr, exitCode };
-}
-
-function formatCommand(command: string[]) {
-  return command
-    .map((part) => (part.includes(" ") ? `"${part}"` : part))
-    .join(" ");
+  return runCommandBinaryBase(command, { allowFailure, logCommand });
 }
 
 function logCommand(command: string[]) {
@@ -1315,14 +1317,6 @@ function logCommand(command: string[]) {
 
 function logInfo(message: string) {
   console.log(`[info] ${message}`);
-}
-
-function formatSeconds(value: number) {
-  return `${value.toFixed(2)}s`;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }
 
 function buildIntermediatePath(
@@ -1363,16 +1357,6 @@ function formatChapterFilename(chapter: Chapter) {
   return `chapter-${String(chapter.index + 1).padStart(2, "0")}-${slug}`;
 }
 
-function toKebabCase(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/['".,]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-+/g, "-") || "untitled";
-}
-
 function matchesTranscriptionPhrase(transcript: string, phrases: string[]) {
   return phrases.some((phrase) => transcript.toLowerCase().includes(phrase.toLowerCase()));
 }
@@ -1393,6 +1377,34 @@ function countTranscriptWords(transcript: string) {
     return 0;
   }
   return transcript.trim().split(/\s+/).length;
+}
+
+function scaleTranscriptSegments(
+  segments: TranscriptSegment[],
+  duration: number,
+) {
+  if (segments.length === 0) {
+    return segments;
+  }
+  const candidates = segments.filter((segment) => /[a-z0-9]/i.test(segment.text));
+  const maxEnd = Math.max(
+    ...(candidates.length > 0 ? candidates : segments).map((segment) => segment.end),
+  );
+  if (!Number.isFinite(maxEnd) || maxEnd <= 0) {
+    return segments;
+  }
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return segments;
+  }
+  const scale = duration / maxEnd;
+  if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.02) {
+    return segments;
+  }
+  return segments.map((segment) => ({
+    ...segment,
+    start: segment.start * scale,
+    end: segment.end * scale,
+  }));
 }
 
 function extractTranscriptCommands(
@@ -1500,7 +1512,19 @@ function normalizeWords(text: string) {
   if (!normalized) {
     return [];
   }
-  return normalized.split(/\s+/).filter(Boolean);
+  const words = normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((word) => {
+      if (word === "jervis") {
+        return ["jarvis"];
+      }
+      if (word === "badtake" || /^batte(ik|ke)$/.test(word)) {
+        return ["bad", "take"];
+      }
+      return [word];
+    });
+  return words;
 }
 
 function buildCommandWindows(

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
+import { runCommand } from "./utils";
 
 const DEFAULT_MODEL_FILENAME = "ggml-tiny.en.bin";
 const DEFAULT_MODEL_URL =
@@ -24,6 +25,7 @@ export type TranscriptSegment = {
 export type TranscriptionResult = {
   text: string;
   segments: TranscriptSegment[];
+  segmentsSource: "tokens" | "segments" | "transcription" | "none";
 };
 
 export function getDefaultWhisperModelPath() {
@@ -57,10 +59,7 @@ export async function transcribeAudio(
     resolvedAudioPath,
     "-l",
     language,
-    "-nt",
-    "-ml",
-    "1",
-    "-oj",
+    "-ojf",
     "-otxt",
     "-of",
     outputBasePath,
@@ -73,9 +72,11 @@ export async function transcribeAudio(
   const result = await runCommand(args);
   const transcriptPath = `${outputBasePath}.txt`;
   const transcript = await readTranscriptText(transcriptPath, result.stdout);
-  const segments = await readTranscriptSegments(`${outputBasePath}.json`);
+  const { segments, source } = await readTranscriptSegments(
+    `${outputBasePath}.json`,
+  );
   const normalized = normalizeTranscriptText(transcript);
-  return { text: normalized, segments };
+  return { text: normalized, segments, segmentsSource: source };
 }
 
 async function ensureModelFile(modelPath: string) {
@@ -114,10 +115,10 @@ async function readTranscriptText(transcriptPath: string, fallback: string) {
 
 async function readTranscriptSegments(
   transcriptPath: string,
-): Promise<TranscriptSegment[]> {
+): Promise<{ segments: TranscriptSegment[]; source: TranscriptionResult["segmentsSource"] }> {
   const transcriptFile = Bun.file(transcriptPath);
   if (!(await transcriptFile.exists())) {
-    return [];
+    return { segments: [], source: "none" };
   }
   const raw = await transcriptFile.text();
   try {
@@ -130,18 +131,116 @@ async function readTranscriptSegments(
   }
 }
 
-function parseTranscriptSegments(payload: unknown): TranscriptSegment[] {
+function parseTranscriptSegments(
+  payload: unknown,
+): { segments: TranscriptSegment[]; source: TranscriptionResult["segmentsSource"] } {
   if (!payload || typeof payload !== "object") {
-    return [];
+    return { segments: [], source: "none" };
+  }
+  const transcription = (payload as any).transcription;
+  const tokenSegments = parseTokenSegments(transcription);
+  if (tokenSegments.length > 0) {
+    return {
+      segments: tokenSegments.sort((a, b) => a.start - b.start),
+      source: "tokens",
+    };
   }
   const segments = parseSegmentsArray((payload as any).segments);
   if (segments.length > 0) {
-    return segments.sort((a, b) => a.start - b.start);
+    return {
+      segments: segments.sort((a, b) => a.start - b.start),
+      source: "segments",
+    };
   }
-  const transcriptionSegments = parseTranscriptionArray(
-    (payload as any).transcription,
+  const transcriptionSegments = parseTranscriptionArray(transcription);
+  return {
+    segments: transcriptionSegments.sort((a, b) => a.start - b.start),
+    source: transcriptionSegments.length > 0 ? "transcription" : "none",
+  };
+}
+
+type TokenOffsets = { from: number; to: number };
+
+function parseTokenSegments(rawTranscription: unknown): TranscriptSegment[] {
+  if (!Array.isArray(rawTranscription)) {
+    return [];
+  }
+  const tokens = rawTranscription.flatMap((segment: any) =>
+    Array.isArray(segment?.tokens) ? segment.tokens : [],
   );
-  return transcriptionSegments.sort((a, b) => a.start - b.start);
+  if (tokens.length === 0) {
+    return [];
+  }
+
+  const segments: TranscriptSegment[] = [];
+  let currentWord = "";
+  let currentStart: number | null = null;
+  let currentEnd: number | null = null;
+
+  const flush = () => {
+    if (currentWord.trim() && currentStart !== null && currentEnd !== null) {
+      segments.push({
+        start: currentStart,
+        end: currentEnd,
+        text: currentWord.trim(),
+      });
+    }
+    currentWord = "";
+    currentStart = null;
+    currentEnd = null;
+  };
+
+  for (const token of tokens) {
+    if (!token || typeof token !== "object") {
+      continue;
+    }
+    const text = typeof token.text === "string" ? token.text : "";
+    if (!text || text.startsWith("[_")) {
+      continue;
+    }
+    const offsets = getTokenOffsets(token);
+    if (!offsets) {
+      continue;
+    }
+
+    const hasLeadingSpace = /^\s/.test(text);
+    const cleaned = text.replace(/^\s+/, "");
+    if (!cleaned) {
+      continue;
+    }
+    const isPunctuation = !/[a-z0-9]/i.test(cleaned);
+
+    if (hasLeadingSpace && currentWord) {
+      flush();
+    }
+    if (isPunctuation) {
+      if (currentWord) {
+        currentEnd = offsets.to / 1000;
+      }
+      continue;
+    }
+
+    if (!currentWord) {
+      currentStart = offsets.from / 1000;
+    }
+    currentWord += cleaned;
+    currentEnd = offsets.to / 1000;
+  }
+  flush();
+  return segments;
+}
+
+function getTokenOffsets(token: any): TokenOffsets | null {
+  const offsets = token?.offsets;
+  const startMs = Number(offsets?.from);
+  const endMs = Number(offsets?.to);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    return null;
+  }
+  if (endMs <= startMs) {
+    return null;
+  }
+  return { from: startMs, to: endMs };
 }
 
 function parseSegmentsArray(rawSegments: unknown): TranscriptSegment[] {
@@ -238,28 +337,3 @@ function normalizeTranscriptText(text: string) {
     .trim();
 }
 
-async function runCommand(command: string[]) {
-  const proc = Bun.spawn(command, {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  if (exitCode !== 0) {
-    throw new Error(
-      `Command failed (${exitCode}): ${formatCommand(command)}\n${stderr}`,
-    );
-  }
-
-  return { stdout, stderr, exitCode };
-}
-
-function formatCommand(command: string[]) {
-  return command
-    .map((part) => (part.includes(" ") ? `"${part}"` : part))
-    .join(" ");
-}
