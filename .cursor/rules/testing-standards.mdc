@@ -1,0 +1,72 @@
+---
+description: Testing standards - flat tests with factory functions
+globs: "**/*.test.ts"
+alwaysApply: false
+---
+
+# Testing Standards
+
+Use Bun's built-in test runner. Follow these principles for maintainable tests.
+
+## No Nesting
+
+Avoid `describe` blocks. Use flat `test` functions with descriptive names that include all context.
+
+```typescript
+// ❌ BAD - nested
+describe("mergeTimeRanges", () => {
+  describe("with overlapping ranges", () => {
+    test("merges them", () => { ... });
+  });
+});
+
+// ✅ GOOD - flat with descriptive name
+test("mergeTimeRanges merges overlapping ranges", () => { ... });
+```
+
+## Factory Functions for Test Data
+
+Create factory functions instead of inline object literals. This makes tests more readable and data reusable.
+
+```typescript
+// ❌ BAD - inline objects
+test("merges ranges", () => {
+  const result = mergeTimeRanges([
+    { start: 1, end: 5 },
+    { start: 3, end: 8 },
+  ]);
+});
+
+// ✅ GOOD - factory functions
+function createRange(start: number, end: number): TimeRange {
+  return { start, end };
+}
+
+function createRanges(...pairs: [number, number][]): TimeRange[] {
+  return pairs.map(([start, end]) => createRange(start, end));
+}
+
+test("mergeTimeRanges merges overlapping ranges", () => {
+  const result = mergeTimeRanges(createRanges([1, 5], [3, 8]));
+  expect(result).toEqual([createRange(1, 8)]);
+});
+```
+
+## Test File Structure
+
+```typescript
+import { test, expect } from "bun:test";
+import { functionUnderTest } from "./module";
+
+// Factory functions at top
+function createTestData() { ... }
+
+// Flat tests grouped by function (just comments, no describe)
+test("functionName handles normal case", () => { ... });
+test("functionName handles edge case", () => { ... });
+test("functionName throws for invalid input", () => { ... });
+```
+
+References:
+- https://kentcdodds.com/blog/avoid-nesting-when-youre-testing
+- https://www.epicweb.dev/better-test-setup-with-disposable-objects
