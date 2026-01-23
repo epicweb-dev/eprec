@@ -1,101 +1,142 @@
-# epic-recording docs
+# epic-recording
 
-## Overview
-This repo is a Bun-based CLI that processes a recorded course video by splitting
-chapter markers into separate files, trimming silence at the start/end, and
-optionally removing spoken "Jarvis" command windows via transcript timestamps
-refined with audio-based silence detection.
-
-The main entry point is `process-course-video.ts`. The default `index.ts` is a
-placeholder.
+A Bun-based CLI that processes recorded course videos by splitting chapter markers into separate files, trimming silence at the start/end, and optionally removing spoken "Jarvis" command windows via transcript timestamps refined with audio-based silence detection.
 
 ## Requirements
-- Bun (runtime + package manager).
-- ffmpeg + ffprobe available on PATH.
-- If using transcription:
-  - `whisper-cli` from whisper.cpp on PATH (or pass `--whisper-binary-path`).
-  - Model file (auto-downloaded to `.cache/whispercpp/ggml-tiny.en.bin`).
-- VAD uses `onnxruntime-node` and downloads a Silero VAD model on first use.
 
-## Quick start
+- **Bun** - runtime and package manager
+- **ffmpeg + ffprobe** - must be available on PATH
+- **whisper-cli** *(optional)* - from [whisper.cpp](https://github.com/ggerganov/whisper.cpp), required for transcription
+  - Pass `--whisper-binary-path` if not on PATH
+  - Model file auto-downloads to `.cache/whispercpp/ggml-tiny.en.bin`
+- **Silero VAD model** - auto-downloads to `.cache/silero-vad.onnx` on first use
+
+## Quick Start
+
 ```bash
 bun install
 bun process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
-  --min-chapter-seconds 2 \
   --enable-transcription \
   --keep-intermediates \
   --write-logs
 ```
 
-## CLI usage
-The CLI accepts:
-- `input` (required): input video file (mp4/mkv).
-- `outputDir` (optional): default `output`.
-- `--min-chapter-seconds` / `-m`: skip very short chapters.
-- `--dry-run` / `-d`: don't write files or run ffmpeg.
-- `--keep-intermediates` / `-k`: keep `.tmp` files for debugging.
-- `--write-logs` / `-l`: write log files for skips/fallbacks.
-- `--enable-transcription`: run whisper.cpp command detection.
-- `--whisper-model-path`: model file (defaults to cached tiny model).
-- `--whisper-language`: language passed to whisper.
-- `--whisper-binary-path`: path to `whisper-cli`.
-- `--whisper-skip-phrase`: repeatable skip phrases.
-- `--chapter` / `-c`: filter to specific chapter numbers/ranges.
+## CLI Options
 
-See `process-course-video.ts` for the authoritative parser.
+| Option | Alias | Description | Default |
+|--------|-------|-------------|---------|
+| `input` | | Input video file (mp4/mkv) | *required* |
+| `outputDir` | | Output directory | `output` |
+| `--min-chapter-seconds` | `-m` | Skip chapters shorter than this | `15` |
+| `--dry-run` | `-d` | Don't write files or run ffmpeg | `false` |
+| `--keep-intermediates` | `-k` | Keep `.tmp` files for debugging | `false` |
+| `--write-logs` | `-l` | Write log files for skips/fallbacks | `false` |
+| `--enable-transcription` | | Run whisper.cpp for command detection | `false` |
+| `--whisper-model-path` | | Path to whisper.cpp model file | auto-cached |
+| `--whisper-language` | | Language for whisper | `en` |
+| `--whisper-binary-path` | | Path to `whisper-cli` binary | system PATH |
+| `--chapter` | `-c` | Filter to specific chapters (see below) | all |
 
-## Output structure
-Output is written to the output directory. When `--keep-intermediates` is
-enabled, intermediate files land in `output/.tmp/`:
-- `*-raw.mp4`: raw chapter clip with initial padding removed.
-- `*-normalized.mp4`: normalized audio (highpass + denoise + loudnorm).
-- `*-transcribe.wav` / `*.json` / `*.txt`: whisper inputs/outputs.
-- `*-splice-*.mp4`: pre/post command-window segments.
-- `*-spliced.mp4`: concatenated output after command removal.
-- `process-summary.log`: summary if `--write-logs` is enabled.
+### Chapter Selection
 
-Final files follow chapter titles (or rename via filename command), e.g.
-`chapter-03-test-in-the-middle.mp4`.
+The `--chapter` flag supports flexible selection:
 
-## Key processing stages
-1. **Chapter discovery** via ffprobe `-show_chapters`.
-2. **Initial trim**: removes `rawTrimPaddingSeconds` from both ends.
-3. **Speech bounds**: VAD detects first/last speech in the chapter.
-4. **Padding**: adds `preSpeechPaddingSeconds`/`postSpeechPaddingSeconds`.
-5. **Normalization**: highpass + afftdn + loudnorm.
-6. **Transcription (optional)**:
-   - Whisper.cpp transcript is parsed to find commands.
-   - "bad take" skips the chapter.
-   - "filename" command renames output.
-7. **Command window removal**:
-   - Transcript timestamps are padded and refined to silence.
-   - Windows are merged and removed via segment splicing/concat.
-8. **Post-splice trim**:
-   - Speech bounds re-detected and trimmed on spliced output.
-9. **Final extract** to output file.
+- Single: `--chapter 4`
+- Range: `--chapter 4-6`
+- Open range: `--chapter 4-*` (chapter 4 to end)
+- Multiple: `--chapter 4,6,9-12`
 
-## Transcription + command handling
-Commands are extracted from whisper tokens/segments:
-- Wake word: `jarvis`.
-- Close word: `thanks`.
-- Commands include `bad-take` and `filename <value>`.
+Chapter numbers are 1-based by default.
 
-Command windows are refined using:
-- Silero VAD (speech segments) to find nearby silence gaps.
-- RMS fallback when VAD is unavailable.
-- A backward-trim cap to avoid removing too much pre-wake speech.
+## Output Structure
 
-## Speech detection (VAD)
-The VAD pipeline:
-- Audio is read as mono float samples.
-- Silero VAD runs via ONNX, producing speech probabilities.
-- Probabilities are converted into speech segments.
-- If VAD fails, the full clip is used as a fallback.
+Final files are written to the output directory with names like:
 
-## Logging + debugging
-When `--write-logs` is enabled, skip and fallback details are written to
-`output/.tmp/*.log` and a summary log is generated.
+```
+chapter-01-intro.mp4
+chapter-02-getting-started.mp4
+chapter-03-custom-title.mp4
+```
+
+When `--keep-intermediates` is enabled, intermediate files go to `output/.tmp/`:
+
+| File Pattern | Description |
+|--------------|-------------|
+| `*-raw.mp4` | Raw chapter clip with initial padding removed |
+| `*-normalized.mp4` | Audio normalized (highpass + denoise + loudnorm) |
+| `*-transcribe.wav` | Audio extracted for whisper |
+| `*-transcribe.json` | Whisper JSON output |
+| `*-transcribe.txt` | Whisper text output |
+| `*-splice-*.mp4` | Segments before/after command windows |
+| `*-spliced.mp4` | Concatenated output after command removal |
+| `*.log` | Per-chapter skip/fallback logs |
+| `process-summary.log` | Overall processing summary |
+
+## Processing Pipeline
+
+1. **Chapter discovery** - Extract chapters via `ffprobe -show_chapters`
+2. **Initial trim** - Remove 0.1s padding from both ends
+3. **Raw extraction** - Extract chapter segment from source video
+4. **Audio normalization** - Apply highpass filter, noise reduction (`afftdn`), and EBU R128 loudness normalization
+5. **Transcription** *(optional)* - Run whisper.cpp on normalized audio
+6. **Command parsing** - Extract Jarvis commands from transcript
+7. **Skip check** - Skip chapter if "bad take" command detected or transcript has ≤10 words
+8. **Command window removal** - Splice out command windows (or trim if command is at end)
+9. **Speech bounds detection** - VAD detects first/last speech in final content
+10. **Padded trim** - Add padding around speech bounds (0.25s before, 0.35s after)
+11. **Final extraction** - Write final chapter file
+
+## Voice Commands
+
+Commands are spoken in the format: `jarvis <command> ... thanks`
+
+| Command | Effect |
+|---------|--------|
+| `jarvis bad take thanks` | Skip the entire chapter |
+| `jarvis filename my-custom-name thanks` | Rename output file |
+
+The command window (from "jarvis" to "thanks") is removed from the final video.
+
+### Command Window Refinement
+
+Command timestamps are refined to silence boundaries using:
+
+1. **Direct check** - Keep timestamp if already at silence
+2. **VAD gaps** - Find nearest silence gap via Silero VAD
+3. **RMS fallback** - Detect low-RMS windows when VAD unavailable
+4. **Backward cap** - Limit backward expansion to 0.2s max to avoid cutting speech
+
+## Speech Detection (VAD)
+
+The VAD pipeline uses Silero VAD via ONNX:
+
+1. Audio read as mono 16kHz float samples
+2. Silero model produces per-window speech probabilities
+3. Probabilities converted to speech segments with hysteresis
+4. First/last speech timestamps used for trimming
+5. Falls back to full clip if VAD fails
+
+## Logging and Debugging
+
+When `--write-logs` is enabled:
+
+- Per-chapter logs written to `output/.tmp/*.log` for skips and fallbacks
+- Summary log written to `output/.tmp/process-summary.log`
 
 ## Caches
-- VAD model: `.cache/silero-vad.onnx` (downloaded on first use).
-- Whisper model: `.cache/whispercpp/ggml-tiny.en.bin`.
+
+Models are automatically downloaded and cached:
+
+| File | Source |
+|------|--------|
+| `.cache/silero-vad.onnx` | Hugging Face (Silero VAD) |
+| `.cache/whispercpp/ggml-tiny.en.bin` | Hugging Face (whisper.cpp) |
+
+## Source Files
+
+| File | Description |
+|------|-------------|
+| `process-course-video.ts` | Main CLI entry point |
+| `speech-detection.ts` | Silero VAD integration |
+| `whispercpp-transcribe.ts` | Whisper.cpp integration |
+| `utils.ts` | Shared utilities |

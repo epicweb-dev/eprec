@@ -1,6 +1,5 @@
 {
   "name": "epic-recording",
-  "module": "index.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
