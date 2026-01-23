@@ -4,7 +4,7 @@ import { mkdir, unlink } from "node:fs/promises";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import type { Argv, Arguments } from "yargs";
-import * as ort from "onnxruntime-node";
+import { detectSpeechSegmentsWithVad } from "./speech-detection";
 
 type Chapter = {
   index: number;
@@ -27,18 +27,15 @@ type SpeechBounds = {
   note?: string;
 };
 
-type CliArgs =
-  | { shouldExit: true }
-  | {
-      shouldExit: false;
-      inputPath: string;
-      outputDir: string;
-      minChapterDurationSeconds: number;
-      dryRun: boolean;
-      keepIntermediates: boolean;
-      writeLogs: boolean;
-      chapterSelection: ChapterSelection | null;
-    };
+type ChapterRange = {
+  start: number;
+  end: number | null;
+};
+
+type ChapterSelection = {
+  base: 0 | 1;
+  ranges: ChapterRange[];
+};
 
 const CONFIG = {
   preSpeechPaddingSeconds: 0.25,
@@ -62,6 +59,8 @@ const CONFIG = {
   audioCodec: "aac",
   audioBitrate: "192k",
 };
+
+const DEFAULT_MIN_CHAPTER_SECONDS = 15;
 
 async function main() {
   const parsedArgs = parseCliArgs();
@@ -338,7 +337,7 @@ async function main() {
   }
 }
 
-function parseCliArgs(): CliArgs {
+function parseCliArgs() {
   const rawArgs = hideBin(process.argv);
   const parser = yargs(rawArgs)
     .scriptName("process-course-video")
@@ -363,6 +362,7 @@ function parseCliArgs(): CliArgs {
             type: "number",
             alias: "m",
             describe: "Skip chapters shorter than this duration in seconds",
+            default: DEFAULT_MIN_CHAPTER_SECONDS,
           })
           .option("dry-run", {
             type: "boolean",
@@ -410,7 +410,7 @@ function parseCliArgs(): CliArgs {
     parser.showHelp((message) => {
       console.log(message);
     });
-    return { shouldExit: true };
+    return { shouldExit: true } as const;
   }
 
   const argv = parser.parseSync();
@@ -425,10 +425,7 @@ function parseCliArgs(): CliArgs {
       ? argv.outputDir
       : "output";
 
-  const minChapterDurationSeconds =
-    argv["min-chapter-seconds"] === undefined
-      ? 15
-      : Number(argv["min-chapter-seconds"]);
+  const minChapterDurationSeconds = Number(argv["min-chapter-seconds"]);
   if (
     !Number.isFinite(minChapterDurationSeconds) ||
     minChapterDurationSeconds < 0
@@ -446,18 +443,8 @@ function parseCliArgs(): CliArgs {
     chapterSelection:
       argv.chapter === undefined ? null : parseChapterSelection(argv.chapter),
     shouldExit: false,
-  };
+  } as const;
 }
-
-type ChapterRange = {
-  start: number;
-  end: number | null;
-};
-
-type ChapterSelection = {
-  base: 0 | 1;
-  ranges: ChapterRange[];
-};
 
 function parseChapterSelection(rawSelection: unknown): ChapterSelection {
   const rawList = Array.isArray(rawSelection) ? rawSelection : [rawSelection];
@@ -634,16 +621,9 @@ async function detectSpeechBounds(
   chapterEnd: number,
   duration: number,
 ): Promise<SpeechBounds> {
-  /**
-   * Determine the speech window inside a chapter using a VAD model.
-   */
   const clipDuration = chapterEnd - chapterStart;
   if (clipDuration <= 0) {
-    return {
-      start: 0,
-      end: duration,
-      note: "Invalid chapter boundaries; using full chapter.",
-    };
+    return speechFallback(duration, "Invalid chapter boundaries; using full chapter.");
   }
 
   const samples = await readAudioSamples({
@@ -652,256 +632,38 @@ async function detectSpeechBounds(
     duration: clipDuration,
     sampleRate: CONFIG.vadSampleRate,
   });
+  const fallbackNote = `Speech detection failed near ${formatSeconds(chapterStart)}; using full chapter.`;
   if (samples.length === 0) {
-    return {
-      start: 0,
-      end: duration,
-      note: `Speech detection failed near ${formatSeconds(chapterStart)}; using full chapter.`,
-    };
+    return speechFallback(duration, fallbackNote);
   }
 
   const vadSegments = await detectSpeechSegmentsWithVad(
     samples,
     CONFIG.vadSampleRate,
+    CONFIG,
   );
   if (vadSegments.length === 0) {
-    return {
-      start: 0,
-      end: duration,
-      note: `Speech detection failed near ${formatSeconds(chapterStart)}; using full chapter.`,
-    };
+    return speechFallback(duration, fallbackNote);
   }
   const firstSegment = vadSegments[0];
   const lastSegment = vadSegments[vadSegments.length - 1];
   if (!firstSegment || !lastSegment) {
-    return {
-      start: 0,
-      end: duration,
-      note: `Speech detection failed near ${formatSeconds(chapterStart)}; using full chapter.`,
-    };
+    return speechFallback(duration, fallbackNote);
   }
   const speechStart = firstSegment.start;
   const speechEnd = lastSegment.end;
 
   if (speechEnd <= speechStart + 0.1) {
-    return {
-      start: 0,
-      end: duration,
-      note: `Speech detection failed near ${formatSeconds(chapterStart)}; using full chapter.`,
-    };
+    return speechFallback(duration, fallbackNote);
   }
 
   return { start: speechStart, end: speechEnd };
 }
-type VadSegment = { start: number; end: number };
 
-let vadSessionPromise: Promise<ort.InferenceSession> | null = null;
-
-async function detectSpeechSegmentsWithVad(
-  samples: Float32Array,
-  sampleRate: number,
-): Promise<VadSegment[]> {
-  const vadSession = await getVadSession();
-  const probabilities = await getVadProbabilities(samples, sampleRate, vadSession);
-  return probabilitiesToSegments(samples.length, probabilities, sampleRate);
+function speechFallback(duration: number, note: string): SpeechBounds {
+  return { start: 0, end: duration, note };
 }
 
-async function getVadSession() {
-  if (!vadSessionPromise) {
-    vadSessionPromise = (async () => {
-      const modelPath = await ensureVadModel();
-      return ort.InferenceSession.create(modelPath, {
-        executionProviders: ["cpu"],
-      });
-    })();
-  }
-  return vadSessionPromise;
-}
-
-async function ensureVadModel() {
-  const cacheDir = path.join(process.cwd(), ".cache");
-  const modelPath = path.join(cacheDir, "silero-vad.onnx");
-  const file = Bun.file(modelPath);
-  if (await file.exists()) {
-    return modelPath;
-  }
-
-  await mkdir(cacheDir, { recursive: true });
-  const response = await fetch(CONFIG.vadModelUrl);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to download VAD model (${response.status} ${response.statusText}).`,
-    );
-  }
-  const buffer = await response.arrayBuffer();
-  await Bun.write(modelPath, new Uint8Array(buffer));
-  return modelPath;
-}
-
-async function getVadProbabilities(
-  samples: Float32Array,
-  sampleRate: number,
-  session: ort.InferenceSession,
-) {
-  const windowSamples = CONFIG.vadWindowSamples;
-  const srTensor = new ort.Tensor(
-    "int64",
-    new BigInt64Array([BigInt(sampleRate)]),
-    [],
-  );
-  const probabilities: number[] = [];
-  let stateH = new Float32Array(2 * 1 * 64);
-  let stateC = new Float32Array(2 * 1 * 64);
-
-  for (let offset = 0; offset < samples.length; offset += windowSamples) {
-    const chunk = samples.subarray(offset, offset + windowSamples);
-    const paddedChunk = new Float32Array(windowSamples);
-    paddedChunk.set(chunk);
-
-    const inputTensor = new ort.Tensor(
-      "float32",
-      paddedChunk,
-      [1, windowSamples],
-    );
-    const hTensor = new ort.Tensor("float32", stateH, [2, 1, 64]);
-    const cTensor = new ort.Tensor("float32", stateC, [2, 1, 64]);
-
-    const outputs = await session.run({
-      input: inputTensor,
-      sr: srTensor,
-      h: hTensor,
-      c: cTensor,
-    });
-
-    const { probTensor, hTensor: nextH, cTensor: nextC } = pickVadOutputs(
-      outputs,
-      session.outputNames,
-    );
-    probabilities.push((probTensor.data as Float32Array)[0] ?? 0);
-    stateH = new Float32Array(nextH.data as Float32Array);
-    stateC = new Float32Array(nextC.data as Float32Array);
-  }
-
-  return probabilities;
-}
-
-function pickVadOutputs(
-  outputs: Record<string, ort.Tensor>,
-  outputNames: readonly string[],
-) {
-  let probTensor: ort.Tensor | null = null;
-  let hTensor: ort.Tensor | null = null;
-  let cTensor: ort.Tensor | null = null;
-
-  for (const name of outputNames) {
-    const tensor = outputs[name];
-    if (!tensor) {
-      continue;
-    }
-    if (name === "output") {
-      probTensor = tensor;
-    } else if (name === "hn") {
-      hTensor = tensor;
-    } else if (name === "cn") {
-      cTensor = tensor;
-    }
-  }
-
-  if (!probTensor || !hTensor || !cTensor) {
-    throw new Error("Unexpected VAD outputs; unable to read speech probabilities.");
-  }
-
-  return { probTensor, hTensor, cTensor };
-}
-
-function probabilitiesToSegments(
-  totalSamples: number,
-  probabilities: number[],
-  sampleRate: number,
-): VadSegment[] {
-  const windowSamples = CONFIG.vadWindowSamples;
-  const threshold = CONFIG.vadSpeechThreshold;
-  const negThreshold = CONFIG.vadNegThreshold;
-  const minSpeechSamples = (sampleRate * CONFIG.vadMinSpeechDurationMs) / 1000;
-  const minSilenceSamples = (sampleRate * CONFIG.vadMinSilenceDurationMs) / 1000;
-  const speechPadSamples = (sampleRate * CONFIG.vadSpeechPadMs) / 1000;
-
-  let triggered = false;
-  let tempEnd = 0;
-  let currentSpeechStart = 0;
-  const speeches: VadSegment[] = [];
-
-  for (let index = 0; index < probabilities.length; index += 1) {
-    const prob = probabilities[index] ?? 0;
-    const currentSample = index * windowSamples;
-
-    if (prob >= threshold && tempEnd) {
-      tempEnd = 0;
-    }
-
-    if (prob >= threshold && !triggered) {
-      triggered = true;
-      currentSpeechStart = currentSample;
-      continue;
-    }
-
-    if (prob < negThreshold && triggered) {
-      if (!tempEnd) {
-        tempEnd = currentSample;
-      }
-      if (currentSample - tempEnd < minSilenceSamples) {
-        continue;
-      }
-      const speechEnd = tempEnd;
-      if (speechEnd - currentSpeechStart >= minSpeechSamples) {
-        speeches.push({ start: currentSpeechStart, end: speechEnd });
-      }
-      triggered = false;
-      tempEnd = 0;
-      currentSpeechStart = 0;
-    }
-  }
-
-  if (triggered) {
-    const speechEnd = totalSamples;
-    if (speechEnd - currentSpeechStart >= minSpeechSamples) {
-      speeches.push({ start: currentSpeechStart, end: speechEnd });
-    }
-  }
-
-  if (speeches.length === 0) {
-    return [];
-  }
-
-  for (let index = 0; index < speeches.length; index += 1) {
-    const speech = speeches[index];
-    if (!speech) {
-      continue;
-    }
-    const nextSpeech = speeches[index + 1];
-    if (index === 0) {
-      speech.start = Math.max(0, speech.start - speechPadSamples);
-    }
-    if (nextSpeech) {
-      const silence = nextSpeech.start - speech.end;
-      if (silence < speechPadSamples * 2) {
-        const adjustment = silence / 2;
-        speech.end += adjustment;
-        nextSpeech.start = Math.max(0, nextSpeech.start - adjustment);
-      } else {
-        speech.end = Math.min(totalSamples, speech.end + speechPadSamples);
-        nextSpeech.start = Math.max(0, nextSpeech.start - speechPadSamples);
-      }
-    } else {
-      speech.end = Math.min(totalSamples, speech.end + speechPadSamples);
-    }
-  }
-
-  return speeches.map((speech) => ({
-    start: speech.start / sampleRate,
-    end: speech.end / sampleRate,
-  }));
-}
 
 async function readAudioSamples(options: {
   inputPath: string;
@@ -973,7 +735,6 @@ function buildNormalizeAudioFilter(options: {
 
   return `${prefilter}${loudnorm.join(":")}`;
 }
-
 
 async function analyzeLoudness(
   inputPath: string,
