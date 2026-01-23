@@ -772,7 +772,6 @@ function parseCliArgs() {
           .positional("outputDir", {
             type: "string",
             describe: "Output directory",
-            default: "output",
           })
           .option("min-chapter-seconds", {
             type: "number",
