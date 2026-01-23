@@ -12,8 +12,8 @@ import { parseChapterSelection } from "./utils/chapter-selection";
 import type { ChapterSelection } from "./types";
 
 export interface CliArgs {
-  inputPath: string;
-  outputDir: string;
+  inputPaths: string[];
+  outputDir: string | null;
   minChapterDurationSeconds: number;
   dryRun: boolean;
   keepIntermediates: boolean;
@@ -33,21 +33,22 @@ export function parseCliArgs(): CliArgs {
   const parser = yargs(rawArgs)
     .scriptName("process-course-video")
     .usage(
-      "Usage: $0 <input.mp4|input.mkv> [output-dir] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]",
+      "Usage: $0 <input.mp4|input.mkv> [input2.mp4 ...] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]",
     )
     .command(
-      "$0 <input> [outputDir]",
+      "$0 <input...>",
       "Process chapters into separate files",
       (command: Argv) =>
         command
           .positional("input", {
             type: "string",
-            describe: "Input video file",
+            array: true,
+            describe: "Input video file(s)",
           })
-          .positional("outputDir", {
+          .option("output-dir", {
             type: "string",
-            describe: "Output directory",
-            default: "output",
+            alias: "o",
+            describe: "Output directory (optional - if not specified, creates directory next to each input file)",
           })
           .option("min-chapter-seconds", {
             type: "number",
@@ -128,8 +129,8 @@ export function parseCliArgs(): CliArgs {
       console.log(message);
     });
     return {
-      inputPath: "",
-      outputDir: "",
+      inputPaths: [],
+      outputDir: null,
       minChapterDurationSeconds: DEFAULT_MIN_CHAPTER_SECONDS,
       dryRun: false,
       keepIntermediates: false,
@@ -146,15 +147,20 @@ export function parseCliArgs(): CliArgs {
 
   const argv = parser.parseSync();
 
-  const inputPath = typeof argv.input === "string" ? argv.input : "";
-  if (!inputPath) {
-    throw new Error("Input file is required.");
+  const inputPaths = Array.isArray(argv.input)
+    ? argv.input.filter((p): p is string => typeof p === "string")
+    : typeof argv.input === "string"
+      ? [argv.input]
+      : [];
+  if (inputPaths.length === 0) {
+    throw new Error("At least one input file is required.");
   }
 
   const outputDir =
-    typeof argv.outputDir === "string" && argv.outputDir.trim().length > 0
-      ? argv.outputDir
-      : path.parse(inputPath).name;
+    typeof argv["output-dir"] === "string" &&
+    argv["output-dir"].trim().length > 0
+      ? argv["output-dir"]
+      : null;
 
   const minChapterDurationSeconds = Number(argv["min-chapter-seconds"]);
   if (
@@ -165,7 +171,7 @@ export function parseCliArgs(): CliArgs {
   }
 
   return {
-    inputPath,
+    inputPaths,
     outputDir,
     minChapterDurationSeconds,
     dryRun: Boolean(argv["dry-run"]),

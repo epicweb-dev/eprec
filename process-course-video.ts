@@ -31,7 +31,7 @@ async function main() {
   }
 
   const {
-    inputPath,
+    inputPaths,
     outputDir,
     minChapterDurationSeconds,
     dryRun,
@@ -43,6 +43,71 @@ async function main() {
     whisperLanguage,
     whisperBinaryPath,
   } = parsedArgs;
+
+  await ensureFfmpegAvailable();
+
+  // Process each input file in turn
+  for (const inputPath of inputPaths) {
+    // Determine output directory for this file
+    let fileOutputDir: string;
+    if (outputDir) {
+      // If only one input file, use output directory as-is
+      // Otherwise, create a subdirectory for each file
+      fileOutputDir =
+        inputPaths.length === 1
+          ? outputDir
+          : path.join(outputDir, path.parse(inputPath).name);
+    } else {
+      // Default: create directory next to input file
+      fileOutputDir = path.join(
+        path.dirname(inputPath),
+        path.parse(inputPath).name,
+      );
+    }
+
+    await processInputFile({
+      inputPath,
+      outputDir: fileOutputDir,
+      minChapterDurationSeconds,
+      dryRun,
+      keepIntermediates,
+      writeLogs,
+      chapterSelection,
+      enableTranscription,
+      whisperModelPath,
+      whisperLanguage,
+      whisperBinaryPath,
+    });
+  }
+}
+
+async function processInputFile(options: {
+  inputPath: string;
+  outputDir: string;
+  minChapterDurationSeconds: number;
+  dryRun: boolean;
+  keepIntermediates: boolean;
+  writeLogs: boolean;
+  chapterSelection: import("./process-course/types").ChapterSelection | null;
+  enableTranscription: boolean;
+  whisperModelPath: string;
+  whisperLanguage: string;
+  whisperBinaryPath: string | undefined;
+}) {
+  const {
+    inputPath,
+    outputDir,
+    minChapterDurationSeconds,
+    dryRun,
+    keepIntermediates,
+    writeLogs,
+    chapterSelection,
+    enableTranscription,
+    whisperModelPath,
+    whisperLanguage,
+    whisperBinaryPath,
+  } = options;
+
   const tmpDir = path.join(outputDir, ".tmp");
 
   const inputFile = Bun.file(inputPath);
@@ -50,7 +115,6 @@ async function main() {
     throw new Error(`Input file not found: ${inputPath}`);
   }
 
-  await ensureFfmpegAvailable();
   if (!dryRun) {
     await mkdir(outputDir, { recursive: true });
     await mkdir(tmpDir, { recursive: true });
@@ -66,6 +130,7 @@ async function main() {
     : null;
 
   logStartupInfo({
+    inputPath,
     chaptersCount: chapters.length,
     chapterIndexes,
     minChapterDurationSeconds,
@@ -195,6 +260,7 @@ async function main() {
 }
 
 function logStartupInfo(options: {
+  inputPath: string;
   chaptersCount: number;
   chapterIndexes: number[] | null;
   minChapterDurationSeconds: number;
@@ -206,6 +272,7 @@ function logStartupInfo(options: {
   whisperLanguage: string;
   whisperBinaryPath: string | undefined;
 }) {
+  logInfo(`Processing: ${options.inputPath}`);
   logInfo(`Chapters found: ${options.chaptersCount}`);
   if (options.chapterIndexes) {
     logInfo(
