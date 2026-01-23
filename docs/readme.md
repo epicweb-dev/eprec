@@ -8,7 +8,7 @@ A Bun-based CLI that processes recorded course videos by splitting chapter marke
 - **ffmpeg + ffprobe** - must be available on PATH
 - **whisper-cli** *(optional)* - from [whisper.cpp](https://github.com/ggerganov/whisper.cpp), required for transcription
   - Pass `--whisper-binary-path` if not on PATH
-  - Model file auto-downloads to `.cache/whispercpp/ggml-tiny.en.bin`
+  - Model file auto-downloads to `.cache/whispercpp/ggml-small.en.bin`
 - **Silero VAD model** - auto-downloads to `.cache/silero-vad.onnx` on first use
 
 ## Quick Start
@@ -130,7 +130,7 @@ Models are automatically downloaded and cached:
 | File | Source |
 |------|--------|
 | `.cache/silero-vad.onnx` | Hugging Face (Silero VAD) |
-| `.cache/whispercpp/ggml-tiny.en.bin` | Hugging Face (whisper.cpp) |
+| `.cache/whispercpp/ggml-small.en.bin` | Hugging Face (whisper.cpp) |
 
 ## Source Files
 

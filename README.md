@@ -20,8 +20,8 @@ Install the local whisper.cpp CLI (Homebrew):
 brew install whisper-cpp
 ```
 
-The default tiny English model is downloaded on first use and cached at
-`.cache/whispercpp/ggml-tiny.en.bin`. Replace that file (or pass
+The default small English model is downloaded on first use and cached at
+`.cache/whispercpp/ggml-small.en.bin`. Replace that file (or pass
 `--whisper-model-path`) to use a different model.
 
 Enable transcription with `--enable-transcription` when running

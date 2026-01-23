@@ -2,9 +2,9 @@ import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { runCommand } from "./utils";
 
-const DEFAULT_MODEL_FILENAME = "ggml-tiny.en.bin";
+const DEFAULT_MODEL_FILENAME = "ggml-small.en.bin";
 const DEFAULT_MODEL_URL =
-  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin";
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin";
 const DEFAULT_LANGUAGE = "en";
 const DEFAULT_BINARY = "whisper-cli";
 
