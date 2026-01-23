@@ -43,12 +43,12 @@ type ChapterSelection = {
 
 const CONFIG = {
   preSpeechPaddingSeconds: 0.25,
-  postSpeechPaddingSeconds: 0.25,
+  postSpeechPaddingSeconds: 0.35,
   rawTrimPaddingSeconds: 0.1,
   vadSampleRate: 16000,
   vadWindowSamples: 512,
-  vadSpeechThreshold: 0.7,
-  vadNegThreshold: 0.6,
+  vadSpeechThreshold: 0.65,
+  vadNegThreshold: 0.55,
   vadMinSpeechDurationMs: 250,
   vadMinSilenceDurationMs: 120,
   vadSpeechPadMs: 10,
