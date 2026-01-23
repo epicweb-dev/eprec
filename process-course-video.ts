@@ -5,6 +5,10 @@ import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import type { Argv, Arguments } from "yargs";
 import { detectSpeechSegmentsWithVad } from "./speech-detection";
+import {
+  getDefaultWhisperModelPath,
+  transcribeAudio,
+} from "./whispercpp-transcribe";
 
 type Chapter = {
   index: number;
@@ -61,6 +65,8 @@ const CONFIG = {
 };
 
 const DEFAULT_MIN_CHAPTER_SECONDS = 15;
+const TRANSCRIPTION_PHRASES = ["jarvis bad take", "bad take jarvis"];
+const TRANSCRIPTION_SAMPLE_RATE = 16000;
 
 async function main() {
   const parsedArgs = parseCliArgs();
@@ -76,7 +82,13 @@ async function main() {
     keepIntermediates,
     writeLogs,
     chapterSelection,
+    enableTranscription,
+    whisperModelPath,
+    whisperLanguage,
+    whisperBinaryPath,
+    whisperSkipPhrases,
   } = parsedArgs;
+  const tmpDir = path.join(outputDir, ".tmp");
 
   const inputFile = Bun.file(inputPath);
   if (!(await inputFile.exists())) {
@@ -86,6 +98,7 @@ async function main() {
   await ensureFfmpegAvailable();
   if (!dryRun) {
     await mkdir(outputDir, { recursive: true });
+    await mkdir(tmpDir, { recursive: true });
   }
 
   const chapters = await getChapters(inputPath);
@@ -114,6 +127,14 @@ async function main() {
   if (writeLogs) {
     logInfo("Writing log files for skipped/fallback cases.");
   }
+  if (enableTranscription) {
+    logInfo(
+      `Whisper transcription enabled (model: ${whisperModelPath}, language: ${whisperLanguage}, binary: ${whisperBinaryPath}).`,
+    );
+    logInfo(
+      `Whisper skip phrases: ${whisperSkipPhrases.length > 0 ? whisperSkipPhrases.join(", ") : "none"}.`,
+    );
+  }
   chapters.forEach((chapter) => {
     logInfo(
       `- [${chapter.index + 1}] ${chapter.title} (${formatSeconds(
@@ -131,6 +152,7 @@ async function main() {
     processed: 0,
     skippedShortInitial: 0,
     skippedShortTrimmed: 0,
+    skippedTranscription: 0,
     fallbackNotes: 0,
     logsWritten: 0,
   };
@@ -148,8 +170,18 @@ async function main() {
       outputDir,
       `${formatChapterFilename(chapter)}${path.extname(inputPath)}`,
     );
-    const rawPath = buildIntermediatePath(outputPath, "raw");
-    const normalizedPath = buildIntermediatePath(outputPath, "normalized");
+    const rawPath = buildIntermediatePath(tmpDir, outputPath, "raw");
+    const normalizedPath = buildIntermediatePath(tmpDir, outputPath, "normalized");
+    const transcriptionAudioPath = buildIntermediateAudioPath(
+      tmpDir,
+      outputPath,
+      "transcribe",
+    );
+    const transcriptionOutputBase = buildTranscriptionOutputBase(
+      tmpDir,
+      outputPath,
+    );
+    const transcriptionTextPath = `${transcriptionOutputBase}.txt`;
 
     if (duration < minChapterDurationSeconds) {
       summary.skippedShortInitial += 1;
@@ -165,9 +197,11 @@ async function main() {
       );
       if (writeLogs) {
         if (dryRun) {
-          logInfo(`[dry-run] Would write log: ${outputPath}.log`);
+          logInfo(
+            `[dry-run] Would write log: ${buildChapterLogPath(tmpDir, outputPath)}`,
+          );
         } else {
-          await writeChapterLog(outputPath, [
+          await writeChapterLog(tmpDir, outputPath, [
             `Chapter: ${chapter.index + 1} - ${chapter.title}`,
             `Input: ${inputPath}`,
             `Duration: ${formatSeconds(duration)}`,
@@ -223,6 +257,7 @@ async function main() {
         logInfo(`Speech detection fallback: ${speechBounds.note}`);
         if (writeLogs) {
           await writeChapterLog(
+            tmpDir,
             outputPath,
             [
               `Chapter: ${chapter.index + 1} - ${chapter.title}`,
@@ -268,13 +303,6 @@ async function main() {
         analysis,
       });
 
-      await extractChapterSegment({
-        inputPath: normalizedPath,
-        outputPath,
-        start: paddedStart,
-        end: paddedEnd,
-      });
-
       if (trimmedDuration < minChapterDurationSeconds) {
         summary.skippedShortTrimmed += 1;
         summaryDetails.push(
@@ -288,7 +316,7 @@ async function main() {
           )})`,
         );
         if (writeLogs) {
-          await writeChapterLog(outputPath, [
+          await writeChapterLog(tmpDir, outputPath, [
             `Chapter: ${chapter.index + 1} - ${chapter.title}`,
             `Input: ${inputPath}`,
             `Duration: ${formatSeconds(duration)}`,
@@ -299,13 +327,83 @@ async function main() {
           summary.logsWritten += 1;
         }
         await safeUnlink(outputPath);
-      } else {
-        summary.processed += 1;
+        continue;
       }
+
+      if (enableTranscription) {
+        await extractTranscriptionAudio({
+          inputPath: normalizedPath,
+          outputPath: transcriptionAudioPath,
+          start: paddedStart,
+          end: paddedEnd,
+        });
+        const transcript = await transcribeAudio(transcriptionAudioPath, {
+          modelPath: whisperModelPath,
+          language: whisperLanguage,
+          binaryPath: whisperBinaryPath,
+          outputBasePath: transcriptionOutputBase,
+        });
+        const transcriptWordCount = countTranscriptWords(transcript);
+        if (transcriptWordCount <= 10) {
+          summary.skippedTranscription += 1;
+          summaryDetails.push(
+            `Skipped chapter ${chapter.index + 1} (transcript too short).`,
+          );
+          logInfo(
+            `Skipping chapter ${chapter.index + 1}: transcript too short (${transcriptWordCount} words).`,
+          );
+          if (writeLogs) {
+            await writeChapterLog(tmpDir, outputPath, [
+              `Chapter: ${chapter.index + 1} - ${chapter.title}`,
+              `Input: ${inputPath}`,
+              `Duration: ${formatSeconds(duration)}`,
+              `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
+              `Transcript words: ${transcriptWordCount}`,
+              "Reason: Transcript too short for skip phrase check.",
+            ]);
+            summary.logsWritten += 1;
+          }
+          await safeUnlink(outputPath);
+          continue;
+        }
+
+        if (matchesTranscriptionPhrase(transcript, whisperSkipPhrases)) {
+          summary.skippedTranscription += 1;
+          summaryDetails.push(
+            `Skipped chapter ${chapter.index + 1} (transcription phrase detected).`,
+          );
+          logInfo(
+            `Skipping chapter ${chapter.index + 1}: transcription matched skip phrase.`,
+          );
+          if (writeLogs) {
+            await writeChapterLog(tmpDir, outputPath, [
+              `Chapter: ${chapter.index + 1} - ${chapter.title}`,
+              `Input: ${inputPath}`,
+              `Duration: ${formatSeconds(duration)}`,
+              `Trimmed duration: ${formatSeconds(trimmedDuration)}`,
+              "Reason: Transcription matched skip phrase.",
+            ]);
+            summary.logsWritten += 1;
+          }
+          await safeUnlink(outputPath);
+          continue;
+        }
+      }
+
+      await extractChapterSegment({
+        inputPath: normalizedPath,
+        outputPath,
+        start: paddedStart,
+        end: paddedEnd,
+      });
+
+      summary.processed += 1;
     } finally {
       if (!keepIntermediates) {
         await safeUnlink(rawPath);
         await safeUnlink(normalizedPath);
+        await safeUnlink(transcriptionAudioPath);
+        await safeUnlink(transcriptionTextPath);
       }
     }
   }
@@ -317,6 +415,7 @@ async function main() {
     `${dryRun ? "Would process" : "Processed"} chapters: ${summary.processed}`,
     `Skipped (short initial): ${summary.skippedShortInitial}`,
     `Skipped (trimmed short): ${summary.skippedShortTrimmed}`,
+    `Skipped (transcription): ${summary.skippedTranscription}`,
     `Fallback notes: ${summary.fallbackNotes}`,
     `Log files written: ${summary.logsWritten}`,
   ];
@@ -328,7 +427,7 @@ async function main() {
   summaryLines.forEach((line) => logInfo(line));
 
   if (writeLogs) {
-    const summaryLogPath = buildSummaryLogPath(outputDir);
+    const summaryLogPath = buildSummaryLogPath(tmpDir);
     if (dryRun) {
       logInfo(`[dry-run] Would write summary log: ${summaryLogPath}`);
     } else {
@@ -339,10 +438,11 @@ async function main() {
 
 function parseCliArgs() {
   const rawArgs = hideBin(process.argv);
+  const defaultWhisperModelPath = getDefaultWhisperModelPath();
   const parser = yargs(rawArgs)
     .scriptName("process-course-video")
     .usage(
-      "Usage: $0 <input.mp4|input.mkv> [output-dir] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs]",
+      "Usage: $0 <input.mp4|input.mkv> [output-dir] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]",
     )
     .command(
       "$0 <input> [outputDir]",
@@ -381,6 +481,32 @@ function parseCliArgs() {
             alias: "l",
             describe: "Write log files when skipping/fallbacks happen",
             default: false,
+          })
+          .option("enable-transcription", {
+            type: "boolean",
+            describe: "Enable whisper.cpp transcription skip checks",
+            default: false,
+          })
+          .option("whisper-model-path", {
+            type: "string",
+            describe: "Path to whisper.cpp model file",
+            default: defaultWhisperModelPath,
+          })
+          .option("whisper-language", {
+            type: "string",
+            describe: "Language passed to whisper.cpp",
+            default: "en",
+          })
+          .option("whisper-binary-path", {
+            type: "string",
+            describe: "Path to whisper.cpp CLI (whisper-cli)",
+          })
+          .option("whisper-skip-phrase", {
+            type: "string",
+            array: true,
+            describe:
+              "Phrase to skip chapters when found in transcript (repeatable)",
+            default: TRANSCRIPTION_PHRASES,
           })
           .option("chapter", {
             type: "string",
@@ -440,6 +566,23 @@ function parseCliArgs() {
     dryRun: Boolean(argv["dry-run"]),
     keepIntermediates: Boolean(argv["keep-intermediates"]),
     writeLogs: Boolean(argv["write-logs"]),
+    enableTranscription: Boolean(argv["enable-transcription"]),
+    whisperModelPath:
+      typeof argv["whisper-model-path"] === "string" &&
+      argv["whisper-model-path"].trim().length > 0
+        ? argv["whisper-model-path"]
+        : defaultWhisperModelPath,
+    whisperLanguage:
+      typeof argv["whisper-language"] === "string" &&
+      argv["whisper-language"].trim().length > 0
+        ? argv["whisper-language"].trim()
+        : "en",
+    whisperBinaryPath:
+      typeof argv["whisper-binary-path"] === "string" &&
+      argv["whisper-binary-path"].trim().length > 0
+        ? argv["whisper-binary-path"].trim()
+        : undefined,
+    whisperSkipPhrases: normalizeSkipPhrases(argv["whisper-skip-phrase"]),
     chapterSelection:
       argv.chapter === undefined ? null : parseChapterSelection(argv.chapter),
     shouldExit: false,
@@ -901,6 +1044,46 @@ async function extractChapterSegment(options: {
   await runCommand(args);
 }
 
+async function extractTranscriptionAudio(options: {
+  inputPath: string;
+  outputPath: string;
+  start: number;
+  end: number;
+}) {
+  const clipDuration = options.end - options.start;
+  if (clipDuration <= 0) {
+    throw new Error(
+      `Invalid transcription window (${formatSeconds(options.start)} -> ${formatSeconds(
+        options.end,
+      )})`,
+    );
+  }
+
+  const args = [
+    "ffmpeg",
+    "-hide_banner",
+    "-y",
+    "-ss",
+    options.start.toFixed(3),
+    "-t",
+    clipDuration.toFixed(3),
+    "-i",
+    options.inputPath,
+    "-vn",
+    "-sn",
+    "-dn",
+    "-ac",
+    "1",
+    "-ar",
+    String(TRANSCRIPTION_SAMPLE_RATE),
+    "-c:a",
+    "pcm_s16le",
+    options.outputPath,
+  ];
+
+  await runCommand(args);
+}
+
 async function runCommand(command: string[], allowFailure = false) {
   logCommand(command);
   const proc = Bun.spawn(command, {
@@ -965,13 +1148,36 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function buildIntermediatePath(outputPath: string, suffix: string) {
+function buildIntermediatePath(
+  tmpDir: string,
+  outputPath: string,
+  suffix: string,
+) {
   const parsed = path.parse(outputPath);
-  return path.join(parsed.dir, `${parsed.name}-${suffix}${parsed.ext}`);
+  return path.join(tmpDir, `${parsed.name}-${suffix}${parsed.ext}`);
 }
 
-function buildSummaryLogPath(outputDir: string) {
-  return path.join(outputDir, "process-summary.log");
+function buildIntermediateAudioPath(
+  tmpDir: string,
+  outputPath: string,
+  suffix: string,
+) {
+  const parsed = path.parse(outputPath);
+  return path.join(tmpDir, `${parsed.name}-${suffix}.wav`);
+}
+
+function buildTranscriptionOutputBase(tmpDir: string, outputPath: string) {
+  const parsed = path.parse(outputPath);
+  return path.join(tmpDir, `${parsed.name}-transcribe`);
+}
+
+function buildSummaryLogPath(tmpDir: string) {
+  return path.join(tmpDir, "process-summary.log");
+}
+
+function buildChapterLogPath(tmpDir: string, outputPath: string) {
+  const parsed = path.parse(outputPath);
+  return path.join(tmpDir, `${parsed.name}.log`);
 }
 
 function formatChapterFilename(chapter: Chapter) {
@@ -990,9 +1196,34 @@ function toKebabCase(value: string) {
     .replace(/-+/g, "-") || "untitled";
 }
 
-async function writeChapterLog(outputPath: string, lines: string[]) {
-  const parsed = path.parse(outputPath);
-  const logPath = path.join(parsed.dir, `${parsed.name}.log`);
+function matchesTranscriptionPhrase(transcript: string, phrases: string[]) {
+  return phrases.some((phrase) => transcript.toLowerCase().includes(phrase.toLowerCase()));
+}
+
+function normalizeSkipPhrases(rawPhrases: unknown) {
+  const rawList = Array.isArray(rawPhrases) ? rawPhrases : [rawPhrases];
+  const phrases = rawList
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => value.toLowerCase());
+
+  return phrases.length > 0 ? phrases : TRANSCRIPTION_PHRASES;
+}
+
+function countTranscriptWords(transcript: string) {
+  if (!transcript.trim()) {
+    return 0;
+  }
+  return transcript.trim().split(/\s+/).length;
+}
+
+async function writeChapterLog(
+  tmpDir: string,
+  outputPath: string,
+  lines: string[],
+) {
+  const logPath = buildChapterLogPath(tmpDir, outputPath);
   const body = `${lines.join("\n")}\n`;
   await Bun.write(logPath, body);
 }
