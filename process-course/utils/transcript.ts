@@ -1,0 +1,68 @@
+import { TRANSCRIPTION_PHRASES } from "../config";
+
+/**
+ * Normalize skip phrases from CLI input.
+ */
+export function normalizeSkipPhrases(rawPhrases: unknown): string[] {
+  const rawList = Array.isArray(rawPhrases) ? rawPhrases : [rawPhrases];
+  const phrases = rawList
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => value.toLowerCase());
+
+  return phrases.length > 0 ? phrases : TRANSCRIPTION_PHRASES;
+}
+
+/**
+ * Count words in a transcript string.
+ */
+export function countTranscriptWords(transcript: string): number {
+  if (!transcript.trim()) {
+    return 0;
+  }
+  return transcript.trim().split(/\s+/).length;
+}
+
+/**
+ * Check if a transcript includes a specific word.
+ */
+export function transcriptIncludesWord(
+  transcript: string,
+  word: string,
+): boolean {
+  if (!transcript.trim()) {
+    return false;
+  }
+  const normalized = normalizeWords(transcript);
+  return normalized.includes(word.toLowerCase());
+}
+
+/**
+ * Normalize text into an array of lowercase words, with common corrections.
+ */
+export function normalizeWords(text: string): string[] {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!normalized) {
+    return [];
+  }
+  if (normalized === "blank audio" || normalized === "blankaudio") {
+    return [];
+  }
+  const words = normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((word) => {
+      if (word === "jervis") {
+        return ["jarvis"];
+      }
+      if (word === "badtake" || /^batte(ik|ke)$/.test(word)) {
+        return ["bad", "take"];
+      }
+      return [word];
+    });
+  return words;
+}

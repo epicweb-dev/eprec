@@ -7,10 +7,8 @@ import {
   DEFAULT_MIN_CHAPTER_SECONDS,
   TRANSCRIPTION_PHRASES,
 } from "./config";
-import {
-  normalizeSkipPhrases,
-  parseChapterSelection,
-} from "./utils";
+import { normalizeSkipPhrases } from "./utils/transcript";
+import { parseChapterSelection } from "./utils/chapter-selection";
 import type { ChapterSelection } from "./types";
 
 export interface CliArgs {

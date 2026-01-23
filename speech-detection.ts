@@ -4,7 +4,7 @@ import * as ort from "onnxruntime-node";
 import { readAudioSamples } from "./process-course/ffmpeg";
 import { CONFIG } from "./process-course/config";
 import { formatSeconds } from "./utils";
-import { speechFallback } from "./process-course/utils";
+import { speechFallback } from "./process-course/utils/audio-analysis";
 import type { SpeechBounds } from "./process-course/types";
 
 export type VadConfig = {

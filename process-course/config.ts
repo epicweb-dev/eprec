@@ -27,6 +27,10 @@ export const CONFIG = {
   commandSilenceRmsThreshold: 0.035,
   commandSilenceMaxBackwardSeconds: 0.2,
   commandTailMaxSeconds: 12,
+  // Transcript analysis
+  minTranscriptWords: 10,
+  // Trim window validation
+  minTrimWindowSeconds: 0.05,
 } as const;
 
 export const DEFAULT_MIN_CHAPTER_SECONDS = 15;

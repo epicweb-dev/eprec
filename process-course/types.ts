@@ -26,18 +26,6 @@ export type TimeRange = {
 
 export type SilenceBoundaryDirection = "before" | "after";
 
-export type TranscriptWord = {
-  word: string;
-  start: number;
-  end: number;
-};
-
-export type TranscriptCommand = {
-  type: "bad-take" | "filename" | "nevermind" | "edit";
-  value?: string;
-  window: TimeRange;
-};
-
 export type JarvisWarning = {
   chapter: Chapter;
   outputPath: string;
@@ -57,3 +45,6 @@ export type ChapterSelection = {
   base: 0 | 1;
   ranges: ChapterRange[];
 };
+
+// Re-export from jarvis-commands for backward compatibility
+export type { TranscriptCommand, TranscriptWord } from "./jarvis-commands/types";

@@ -1,23 +1,59 @@
-import { detectSpeechSegmentsWithVad } from "../speech-detection";
-import { readAudioSamples } from "./ffmpeg";
-import { CONFIG } from "./config";
-import { logInfo } from "./logging";
-import { formatSeconds, clamp } from "../utils";
-import { mergeTimeRanges } from "./utils";
+import { clamp } from "../../utils";
+import { detectSpeechSegmentsWithVad } from "../../speech-detection";
+import { readAudioSamples } from "../ffmpeg";
+import { CONFIG } from "../config";
+import { logInfo } from "../logging";
+import { formatSeconds } from "../../utils";
+import { mergeTimeRanges } from "../utils/time-ranges";
 import {
   buildSilenceGapsFromSpeech,
   findSilenceBoundaryFromGaps,
   findSilenceBoundaryWithRms,
   computeRms,
   computeMinWindowRms,
-} from "./utils";
-import type { TimeRange, SilenceBoundaryDirection } from "./types";
+} from "../utils/audio-analysis";
+import type { TimeRange, SilenceBoundaryDirection } from "../types";
+import type { TranscriptCommand, CommandWindowOptions } from "./types";
 
+/**
+ * Build time windows to remove based on detected commands.
+ */
+export function buildCommandWindows(
+  commands: TranscriptCommand[],
+  options: CommandWindowOptions,
+): TimeRange[] {
+  if (commands.length === 0) {
+    return [];
+  }
+  const windows = commands
+    .map((command) => {
+      const start = clamp(
+        options.offset + command.window.start - options.paddingSeconds,
+        options.min,
+        options.max,
+      );
+      const end = clamp(
+        options.offset + command.window.end + options.paddingSeconds,
+        options.min,
+        options.max,
+      );
+      if (end <= start) {
+        return null;
+      }
+      return { start, end };
+    })
+    .filter((window): window is TimeRange => Boolean(window));
+  return mergeTimeRanges(windows);
+}
+
+/**
+ * Refine command windows to align with silence boundaries.
+ */
 export async function refineCommandWindows(options: {
   commandWindows: TimeRange[];
   inputPath: string;
   duration: number;
-}) {
+}): Promise<TimeRange[]> {
   if (options.commandWindows.length === 0) {
     return [];
   }
@@ -59,11 +95,7 @@ export async function refineCommandWindows(options: {
           direction: "after",
           maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
         });
-    const start = clamp(
-      refinedStart ?? window.start,
-      0,
-      options.duration,
-    );
+    const start = clamp(refinedStart ?? window.start, 0, options.duration);
     const end = clamp(refinedEnd ?? window.end, 0, options.duration);
     if (end <= start + 0.01) {
       refined.push({ start: window.start, end: window.end });
@@ -90,7 +122,7 @@ async function findSilenceBoundary(options: {
   targetTime: number;
   direction: SilenceBoundaryDirection;
   maxSearchSeconds: number;
-}) {
+}): Promise<number | null> {
   const searchStart =
     options.direction === "before"
       ? Math.max(0, options.targetTime - options.maxSearchSeconds)
@@ -141,7 +173,7 @@ async function isSilenceAtTarget(options: {
   duration: number;
   targetTime: number;
   label?: string;
-}) {
+}): Promise<boolean> {
   const halfWindowSeconds = Math.max(
     0.005,
     (CONFIG.commandSilenceRmsWindowMs / 1000) * 1.5,
@@ -189,7 +221,7 @@ async function findSilenceBoundaryWithVad(options: {
   duration: number;
   targetOffset: number;
   direction: SilenceBoundaryDirection;
-}) {
+}): Promise<number | null> {
   try {
     const vadSegments = await detectSpeechSegmentsWithVad(
       options.samples,
@@ -199,16 +231,13 @@ async function findSilenceBoundaryWithVad(options: {
     if (vadSegments.length === 0) {
       return null;
     }
-    const silenceGaps = buildSilenceGapsFromSpeech(
-      vadSegments,
-      options.duration,
-    );
+    const silenceGaps = buildSilenceGapsFromSpeech(vadSegments, options.duration);
     return findSilenceBoundaryFromGaps(
       silenceGaps,
       options.targetOffset,
       options.direction,
     );
-  } catch (error) {
+  } catch {
     logInfo(
       `VAD silence scan failed (${options.direction}); using RMS fallback.`,
     );
