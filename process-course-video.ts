@@ -14,6 +14,7 @@ import {
   clamp,
   formatCommand,
   formatSeconds,
+  normalizeFilename,
   runCommand as runCommandBase,
   runCommandBinary as runCommandBinaryBase,
   toKebabCase,
@@ -1836,7 +1837,8 @@ function buildChapterLogPath(tmpDir: string, outputPath: string) {
 
 function formatChapterFilename(chapter: Chapter) {
   const title = chapter.title ?? `chapter-${chapter.index + 1}`;
-  const slug = toKebabCase(title);
+  const normalized = normalizeFilename(title);
+  const slug = toKebabCase(normalized);
   return `chapter-${String(chapter.index + 1).padStart(2, "0")}-${slug}`;
 }
 

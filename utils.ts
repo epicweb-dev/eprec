@@ -74,3 +74,43 @@ export function toKebabCase(value: string) {
     .replace(/^-+|-+$/g, "")
     .replace(/-+/g, "-") || "untitled";
 }
+
+export function normalizeFilename(value: string) {
+  const numberWords: Record<string, number> = {
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+  };
+
+  const numberWordPattern = new RegExp(
+    `\\b(${Object.keys(numberWords).join("|")})\\b`,
+    "g",
+  );
+
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\b(point|dot)\b/g, ".")
+    .replace(/\s*\.\s*/g, ".")
+    .replace(numberWordPattern, (word) =>
+      String(numberWords[word] ?? word).padStart(2, "0"),
+    );
+}
