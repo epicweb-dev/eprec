@@ -48,3 +48,16 @@ export type ChapterSelection = {
 
 // Re-export from jarvis-commands for backward compatibility
 export type { TranscriptCommand, TranscriptWord } from "./jarvis-commands/types";
+
+export type JarvisNote = {
+  chapter: Chapter;
+  outputPath: string;
+  note: string;
+  timestamp: number;
+};
+
+export type JarvisSplit = {
+  chapter: Chapter;
+  outputPath: string;
+  timestamp: number;
+};

@@ -17,6 +17,19 @@ export function analyzeCommands(
   const hasBadTake = commands.some((command) => command.type === "bad-take");
   const hasEdit = commands.some((command) => command.type === "edit");
 
+  const notes = commands
+    .filter((command) => command.type === "note" && command.value?.trim())
+    .map((command) => ({
+      value: command.value!,
+      window: command.window,
+    }));
+
+  const splits = commands
+    .filter((command) => command.type === "split")
+    .map((command) => ({
+      window: command.window,
+    }));
+
   const transcriptWordCount = countTranscriptWords(transcript);
 
   // Determine if we should skip this chapter
@@ -39,6 +52,8 @@ export function analyzeCommands(
     filenameOverride,
     hasBadTake,
     hasEdit,
+    notes,
+    splits,
     shouldSkip,
     skipReason,
   };

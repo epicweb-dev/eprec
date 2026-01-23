@@ -1,6 +1,6 @@
 import type { TimeRange } from "../types";
 
-export type CommandType = "bad-take" | "filename" | "nevermind" | "edit";
+export type CommandType = "bad-take" | "filename" | "nevermind" | "edit" | "note" | "split";
 
 export interface TranscriptCommand {
   type: CommandType;
@@ -31,6 +31,8 @@ export interface CommandAnalysisResult {
   filenameOverride: string | null;
   hasBadTake: boolean;
   hasEdit: boolean;
+  notes: Array<{ value: string; window: TimeRange }>;
+  splits: Array<{ window: TimeRange }>;
   shouldSkip: boolean;
   skipReason?: string;
 }

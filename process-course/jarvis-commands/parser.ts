@@ -193,6 +193,19 @@ function parseCommand(
   if (words[0] === "edit") {
     return { type: "edit", window };
   }
+  if (words[0] === "note") {
+    const value = words.slice(1).join(" ").trim();
+    if (!value) {
+      return null;
+    }
+    return { type: "note", value, window };
+  }
+  if (words[0] === "split") {
+    return { type: "split", window };
+  }
+  if (words.length >= 2 && words[0] === "new" && words[1] === "chapter") {
+    return { type: "split", window };
+  }
   return null;
 }
 
@@ -201,7 +214,13 @@ function parseCommand(
  */
 function isCommandStarter(word: string): boolean {
   return (
-    word === "bad" || word === "filename" || word === "file" || word === "edit"
+    word === "bad" ||
+    word === "filename" ||
+    word === "file" ||
+    word === "edit" ||
+    word === "note" ||
+    word === "split" ||
+    word === "new"
   );
 }
 
