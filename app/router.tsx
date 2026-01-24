@@ -24,6 +24,9 @@ function bunStaticFiles(
 				return next()
 			}
 			const filePath = path.join(absoluteRoot, relativePath)
+			if (!filePath.startsWith(absoluteRoot + path.sep)) {
+				return next()
+			}
 			const file = Bun.file(filePath)
 			if (!(await file.exists())) {
 				return next()
@@ -45,6 +48,9 @@ function bunStaticFiles(
 			return next()
 		}
 		const filePath = path.join(absoluteRoot, relativePath)
+		if (!filePath.startsWith(absoluteRoot + path.sep)) {
+			return next()
+		}
 		const file = Bun.file(filePath)
 		if (!(await file.exists())) {
 			return next()
@@ -67,28 +73,34 @@ const cacheControl =
 		? 'public, max-age=31536000, immutable'
 		: 'no-cache'
 
-const router = createRouter({
-	middleware: [
-		bunStaticFiles('./public', { cacheControl }),
-		bunStaticFiles('./app', {
-			filter: (pathname) => pathname.startsWith('assets/'),
-			cacheControl,
-		}),
-	],
-	defaultHandler() {
-		return render(
-			Layout({
-				title: 'Not Found',
-				entryScript: false,
-				children: html`<main class="app-shell">
+export function createAppRouter(rootDir: string) {
+	const router = createRouter({
+		middleware: [
+			bunStaticFiles(path.join(rootDir, 'public'), { cacheControl }),
+			bunStaticFiles(path.join(rootDir, 'app'), {
+				filter: (pathname) => pathname.startsWith('assets/'),
+				cacheControl,
+			}),
+		],
+		defaultHandler() {
+			return render(
+				Layout({
+					title: 'Not Found',
+					entryScript: false,
+					children: html`<main class="app-shell">
 					<h1 class="app-title">404 - Not Found</h1>
 				</main>`,
-			}),
-			{ status: 404 },
-		)
-	},
-})
+				}),
+				{ status: 404 },
+			)
+		},
+	})
 
-router.map(routes.index, indexHandlers)
+	router.map(routes.index, indexHandlers)
+
+	return router
+}
+
+const router = createAppRouter(import.meta.dirname)
 
 export default router

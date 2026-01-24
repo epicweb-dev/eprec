@@ -106,24 +106,36 @@ export function createBundlingRoutes(rootDir: string) {
 				})
 			}
 
-			const {
-				outputs: [output],
-			} = await Bun.build({
-				entrypoints: [resolved],
-				target: 'browser',
-				minify: Bun.env.NODE_ENV === 'production',
-				splitting: false,
-				format: 'esm',
-				sourcemap: Bun.env.NODE_ENV === 'production' ? 'none' : 'inline',
-				jsx: { importSource: 'remix/component' },
-			})
+		const buildResult = await Bun.build({
+			entrypoints: [resolved],
+			target: 'browser',
+			minify: Bun.env.NODE_ENV === 'production',
+			splitting: false,
+			format: 'esm',
+			sourcemap: Bun.env.NODE_ENV === 'production' ? 'none' : 'inline',
+			jsx: { importSource: 'remix/component' },
+		})
 
-			return new Response(output, {
+		if (!buildResult.success) {
+			const errorMessage = buildResult.logs
+				.map((log) => log.message)
+				.join('\n')
+			return new Response(errorMessage || 'Build failed', {
+				status: 500,
 				headers: {
-					'Content-Type': 'application/javascript',
+					'Content-Type': 'text/plain',
 					...BUNDLING_CORS_HEADERS,
 				},
 			})
+		}
+
+		const output = buildResult.outputs[0]
+		return new Response(output, {
+			headers: {
+				'Content-Type': 'application/javascript',
+				...BUNDLING_CORS_HEADERS,
+			},
+		})
 		},
 
 		'/node_modules/*': async (request: Request) => {
@@ -148,27 +160,39 @@ export function createBundlingRoutes(rootDir: string) {
 				})
 			}
 
-			const {
-				outputs: [output],
-			} = await Bun.build({
-				entrypoints: [filepath],
-				target: 'browser',
-				minify: Bun.env.NODE_ENV === 'production',
-				splitting: false,
-				format: 'esm',
-				sourcemap: Bun.env.NODE_ENV === 'production' ? 'none' : 'inline',
-			})
+		const buildResult = await Bun.build({
+			entrypoints: [filepath],
+			target: 'browser',
+			minify: Bun.env.NODE_ENV === 'production',
+			splitting: false,
+			format: 'esm',
+			sourcemap: Bun.env.NODE_ENV === 'production' ? 'none' : 'inline',
+		})
 
-			return new Response(output, {
+		if (!buildResult.success) {
+			const errorMessage = buildResult.logs
+				.map((log) => log.message)
+				.join('\n')
+			return new Response(errorMessage || 'Build failed', {
+				status: 500,
 				headers: {
-					'Content-Type': 'application/javascript',
-					'Cache-Control':
-						Bun.env.NODE_ENV === 'production'
-							? 'public, max-age=31536000, immutable'
-							: 'no-cache',
+					'Content-Type': 'text/plain',
 					...BUNDLING_CORS_HEADERS,
 				},
 			})
+		}
+
+		const output = buildResult.outputs[0]
+		return new Response(output, {
+			headers: {
+				'Content-Type': 'application/javascript',
+				'Cache-Control':
+					Bun.env.NODE_ENV === 'production'
+						? 'public, max-age=31536000, immutable'
+						: 'no-cache',
+				...BUNDLING_CORS_HEADERS,
+			},
+		})
 		},
 	}
 }

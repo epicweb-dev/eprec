@@ -2,7 +2,7 @@ import './app/config/init-env.ts'
 
 import getPort from 'get-port'
 import { getEnv } from './app/config/env.ts'
-import router from './app/router.tsx'
+import { createAppRouter } from './app/router.tsx'
 import { createBundlingRoutes } from './server/bundling.ts'
 
 type AppServerOptions = {
@@ -11,6 +11,7 @@ type AppServerOptions = {
 }
 
 function startServer(port: number, hostname: string) {
+	const router = createAppRouter(import.meta.dirname)
 	return Bun.serve({
 		port,
 		hostname,
