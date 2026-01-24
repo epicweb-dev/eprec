@@ -7,8 +7,17 @@ import {
   buildJarvisWarningLogPath,
   buildJarvisNoteLogPath,
 } from "../process-course/paths";
+import { extractTranscriptionAudio } from "../process-course/ffmpeg";
+import { transcriptIncludesWord } from "../process-course/utils/transcript";
+import { transcribeAudio } from "../whispercpp-transcribe";
+import { runCommand } from "../utils";
 
 const TEST_OUTPUT_DIR = path.join(process.cwd(), ".test-output", "e2e-test");
+const TEST_TRANSCRIPT_DIR = path.join(
+  TEST_OUTPUT_DIR,
+  ".tmp",
+  "e2e-transcripts",
+);
 const FIXTURE_PATH = path.resolve("fixtures/e2e-test.mp4");
 
 // Helper to check if file exists
@@ -31,6 +40,61 @@ async function listFiles(dir: string, ext?: string): Promise<string[]> {
     files.push(file);
   }
   return files.sort();
+}
+
+function createExpectedWords(...words: string[]): string[] {
+  return words;
+}
+
+async function ensureTranscriptDir(): Promise<string> {
+  await mkdir(TEST_TRANSCRIPT_DIR, { recursive: true });
+  return TEST_TRANSCRIPT_DIR;
+}
+
+async function getMediaDurationSeconds(filePath: string): Promise<number> {
+  const result = await runCommand([
+    "ffprobe",
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=noprint_wrappers=1:nokey=1",
+    filePath,
+  ]);
+  const duration = Number.parseFloat(result.stdout.trim());
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`Invalid duration for ${filePath}: ${result.stdout}`);
+  }
+  return duration;
+}
+
+async function transcribeOutputVideo(outputPath: string): Promise<string> {
+  const transcriptDir = await ensureTranscriptDir();
+  const baseName = path.parse(outputPath).name;
+  const audioPath = path.join(transcriptDir, `${baseName}-output.wav`);
+  const outputBasePath = path.join(
+    transcriptDir,
+    `${baseName}-output-transcript`,
+  );
+  const duration = await getMediaDurationSeconds(outputPath);
+  await extractTranscriptionAudio({
+    inputPath: outputPath,
+    outputPath: audioPath,
+    start: 0,
+    end: duration,
+  });
+  const transcript = await transcribeAudio(audioPath, { outputBasePath });
+  return transcript.text;
+}
+
+function expectTranscriptIncludesWords(
+  transcript: string,
+  expectedWords: string[],
+) {
+  for (const word of expectedWords) {
+    expect(transcriptIncludesWord(transcript, word)).toBe(true);
+  }
 }
 
 beforeAll(async () => {
@@ -168,6 +232,15 @@ test("e2e chapter 7 and 8 are combined into single output", async () => {
   const mp4Files = await listFiles(TEST_OUTPUT_DIR, ".mp4");
   const chapter8Files = mp4Files.filter((f) => f.startsWith("chapter-08"));
   expect(chapter8Files).toHaveLength(0);
+});
+
+test("e2e combined chapter retains chapter 7 speech content", async () => {
+  const chapter7Path = path.join(TEST_OUTPUT_DIR, "chapter-07-unnamed-6.mp4");
+  const transcript = await transcribeOutputVideo(chapter7Path);
+  expectTranscriptIncludesWords(
+    transcript,
+    createExpectedWords("split", "test"),
+  );
 });
 
 // =============================================================================
