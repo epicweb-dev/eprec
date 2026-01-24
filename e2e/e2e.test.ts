@@ -46,6 +46,10 @@ function createExpectedWords(...words: string[]): string[] {
   return words;
 }
 
+function createExpectedWordGroup(...words: string[]): string[] {
+  return words;
+}
+
 async function ensureTranscriptDir(): Promise<string> {
   await mkdir(TEST_TRANSCRIPT_DIR, { recursive: true });
   return TEST_TRANSCRIPT_DIR;
@@ -95,6 +99,16 @@ function expectTranscriptIncludesWords(
   for (const word of expectedWords) {
     expect(transcriptIncludesWord(transcript, word)).toBe(true);
   }
+}
+
+function expectTranscriptIncludesWordGroup(
+  transcript: string,
+  wordGroup: string[],
+) {
+  const matches = wordGroup.some((word) =>
+    transcriptIncludesWord(transcript, word),
+  );
+  expect(matches).toBe(true);
 }
 
 beforeAll(async () => {
@@ -239,7 +253,11 @@ test("e2e combined chapter retains chapter 7 speech content", async () => {
   const transcript = await transcribeOutputVideo(chapter7Path);
   expectTranscriptIncludesWords(
     transcript,
-    createExpectedWords("split"),
+    createExpectedWords("split", "test", "previous", "joins"),
+  );
+  expectTranscriptIncludesWordGroup(
+    transcript,
+    createExpectedWordGroup("combine", "combined"),
   );
 });
 
