@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { CommandBuilder, CommandHandler } from 'yargs'
 import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
+import { startAppServer } from './app-server'
 import { ensureFfmpegAvailable } from './process-course/ffmpeg'
 import {
 	normalizeProcessArgs,
@@ -52,6 +53,28 @@ async function main() {
 			'Combine two videos with speech-aligned padding',
 			configureCombineVideosCommand as CommandBuilder,
 			handleCombineVideosCommand as CommandHandler,
+		)
+		.command(
+			'app start',
+			'Start the web UI server',
+			(command) =>
+				command
+					.option('port', {
+						type: 'number',
+						describe: 'Port for the app server',
+					})
+					.option('host', {
+						type: 'string',
+						describe: 'Host to bind for the app server',
+					}),
+			async (argv) => {
+				const port =
+					typeof argv.port === 'number' && Number.isFinite(argv.port)
+						? argv.port
+						: undefined
+				const host = resolveOptionalString(argv.host)
+				await startAppServer({ port, host })
+			},
 		)
 		.command(
 			'transcribe <input>',
