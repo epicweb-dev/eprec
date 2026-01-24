@@ -7,7 +7,7 @@ import {
   buildJarvisWarningLogPath,
   buildSummaryLogPath,
 } from "./paths";
-import type { Chapter, JarvisEdit, JarvisWarning } from "./types";
+import type { Chapter, JarvisEdit, JarvisWarning, TimeRange } from "./types";
 import { writeJarvisLogs, writeSummaryLogs } from "./summary";
 
 async function createTempDir(): Promise<string> {
@@ -18,8 +18,16 @@ function createChapter(index: number, title = `Chapter ${index + 1}`): Chapter {
   return { index, start: 0, end: 10, title };
 }
 
-function createWarning(index: number, outputPath: string): JarvisWarning {
-  return { chapter: createChapter(index), outputPath };
+function createTimestamp(start: number, end: number): TimeRange {
+  return { start, end };
+}
+
+function createWarning(
+  index: number,
+  outputPath: string,
+  timestamps: TimeRange[] = [],
+): JarvisWarning {
+  return { chapter: createChapter(index), outputPath, timestamps };
 }
 
 function createEdit(index: number, outputPath: string): JarvisEdit {
@@ -31,7 +39,11 @@ test("writeJarvisLogs writes warning and edit logs", async () => {
   const outputDir = path.join(tmpDir, "output");
   await mkdir(outputDir);
   try {
-    const warning = createWarning(0, path.join(outputDir, "chapter-01.mp4"));
+    const warning = createWarning(
+      0,
+      path.join(outputDir, "chapter-01.mp4"),
+      [createTimestamp(1, 1.5), createTimestamp(4.25, 4.75)],
+    );
     const edit = createEdit(1, path.join(outputDir, "chapter-02.mp4"));
 
     await writeJarvisLogs({
@@ -51,6 +63,9 @@ test("writeJarvisLogs writes warning and edit logs", async () => {
     expect(warningLog).toContain("Detected in:");
     expect(warningLog).toContain("Chapter 1");
     expect(warningLog).toContain("chapter-01.mp4");
+    expect(warningLog).toContain(
+      "Jarvis timestamps: 1.00s-1.50s, 4.25s-4.75s",
+    );
 
     const editLog = await Bun.file(buildJarvisEditLogPath(outputDir)).text();
     expect(editLog).toContain("Input: /videos/course.mp4");

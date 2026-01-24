@@ -29,6 +29,7 @@ export type SilenceBoundaryDirection = "before" | "after";
 export type JarvisWarning = {
   chapter: Chapter;
   outputPath: string;
+  timestamps: TimeRange[];
 };
 
 export type JarvisEdit = {

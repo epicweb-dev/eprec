@@ -22,7 +22,7 @@ import { findSilenceBoundary } from "./jarvis-commands/windows";
 import { mergeTimeRanges, buildKeepRanges } from "./utils/time-ranges";
 import { safeUnlink } from "./utils/file-utils";
 import { formatChapterFilename } from "./utils/filename";
-import { transcriptIncludesWord } from "./utils/transcript";
+import { findWordTimings, transcriptIncludesWord } from "./utils/transcript";
 import {
   extractTranscriptCommands,
   scaleTranscriptSegments,
@@ -317,8 +317,17 @@ export async function processChapter(
         outputBasePath: paths.jarvisTranscriptionOutputBase,
       },
     );
+    const jarvisSegments =
+      jarvisTranscription.segmentsSource === "tokens"
+        ? jarvisTranscription.segments
+        : scaleTranscriptSegments(jarvisTranscription.segments, trimmedDuration);
+    const jarvisWordTimings = findWordTimings(jarvisSegments, "jarvis");
     if (transcriptIncludesWord(jarvisTranscription.text, "jarvis")) {
-      jarvisWarning = { chapter, outputPath: finalOutputPath };
+      jarvisWarning = {
+        chapter,
+        outputPath: finalOutputPath,
+        timestamps: jarvisWordTimings,
+      };
       logWarn(
         `Jarvis detected in chapter ${chapter.index + 1}: ${path.basename(finalOutputPath)}`,
       );
@@ -870,10 +879,16 @@ async function handleCombinePrevious(params: {
       outputBasePath: buildJarvisOutputBase(tmpDir, outputBasePath),
     },
   );
+  const jarvisSegments =
+    jarvisTranscription.segmentsSource === "tokens"
+      ? jarvisTranscription.segments
+      : scaleTranscriptSegments(jarvisTranscription.segments, combinedDuration);
+  const jarvisWordTimings = findWordTimings(jarvisSegments, "jarvis");
   if (transcriptIncludesWord(jarvisTranscription.text, "jarvis")) {
     jarvisWarning = {
       chapter: previousProcessedChapter.chapter,
       outputPath: finalOutputPath,
+      timestamps: jarvisWordTimings,
     };
     logWarn(
       `Jarvis detected in combined chapter: ${path.basename(finalOutputPath)}`,
