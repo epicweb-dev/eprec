@@ -39,6 +39,7 @@ export const EDIT_CONFIG = {
   silenceSearchStartSeconds: 0.1,
   silenceSearchStepSeconds: 0.1,
   silenceSearchMaxSeconds: 2.0,
+  silenceMinDurationMs: 60,
   autoCreateEditsDirectory: true,
   keepEditIntermediates: false,
 } as const;

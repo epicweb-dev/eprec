@@ -141,7 +141,7 @@ async function findSilenceBoundary(options: {
     direction: options.direction,
     rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
     rmsThreshold: CONFIG.commandSilenceRmsThreshold,
-    minSilenceMs: CONFIG.commandSilenceMinDurationMs,
+    minSilenceMs: EDIT_CONFIG.silenceMinDurationMs,
     startWindowSeconds: EDIT_CONFIG.silenceSearchStartSeconds,
     stepSeconds: EDIT_CONFIG.silenceSearchStepSeconds,
     maxWindowSeconds: windowDuration,
