@@ -33,6 +33,13 @@ export const CONFIG = {
   minTrimWindowSeconds: 0.05,
 } as const;
 
+export const EDIT_CONFIG = {
+  speechBoundaryPaddingMs: 125,
+  speechSearchWindowSeconds: 2.0,
+  autoCreateEditsDirectory: true,
+  keepEditIntermediates: false,
+} as const;
+
 export const DEFAULT_MIN_CHAPTER_SECONDS = 15;
 export const TRANSCRIPTION_PHRASES = ["jarvis bad take", "bad take jarvis"];
 export const COMMAND_WAKE_WORD = "jarvis";

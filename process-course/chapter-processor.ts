@@ -2,7 +2,7 @@ import path from "node:path";
 import { detectSpeechBounds, checkSegmentHasSpeech } from "../speech-detection";
 import { transcribeAudio } from "../whispercpp-transcribe";
 import { clamp, formatSeconds } from "../utils";
-import { COMMAND_CLOSE_WORD, COMMAND_WAKE_WORD, CONFIG } from "./config";
+import { COMMAND_CLOSE_WORD, COMMAND_WAKE_WORD, CONFIG, EDIT_CONFIG } from "./config";
 import {
   analyzeLoudness,
   concatSegments,
@@ -31,7 +31,16 @@ import {
   analyzeCommands,
   formatCommandTypes,
 } from "./jarvis-commands";
-import type { Chapter, TimeRange, JarvisWarning, JarvisEdit, JarvisNote, ProcessedChapterInfo } from "./types";
+import type {
+  Chapter,
+  TimeRange,
+  JarvisWarning,
+  JarvisEdit,
+  JarvisNote,
+  ProcessedChapterInfo,
+  EditWorkspaceInfo,
+} from "./types";
+import { createEditWorkspace } from "./edits";
 
 export interface ChapterProcessingOptions {
   inputPath: string;
@@ -62,6 +71,7 @@ export interface ChapterProcessingResult {
   fallbackNote?: string;
   logWritten: boolean;
   processedInfo?: ProcessedChapterInfo;
+  editWorkspace?: EditWorkspaceInfo;
 }
 
 /**
@@ -355,6 +365,28 @@ export async function processChapter(
       );
     }
 
+    // Step 13: Create edit workspace when needed
+    let editWorkspace: EditWorkspaceInfo | undefined;
+    if (EDIT_CONFIG.autoCreateEditsDirectory && (hasEditCommand || jarvisWarning)) {
+      const reason = hasEditCommand ? "edit-command" : "jarvis-warning";
+      const workspace = await createEditWorkspace({
+        outputDir: options.outputDir,
+        sourceVideoPath: finalOutputPath,
+        sourceDuration: trimmedDuration,
+        segments: jarvisSegments,
+      });
+      editWorkspace = {
+        chapter,
+        outputPath: finalOutputPath,
+        reason,
+        editsDirectory: workspace.editsDirectory,
+        transcriptTextPath: workspace.transcriptTextPath,
+        transcriptJsonPath: workspace.transcriptJsonPath,
+        originalVideoPath: workspace.originalVideoPath,
+        instructionsPath: workspace.instructionsPath,
+      };
+    }
+
     const processedInfo: ProcessedChapterInfo = {
       chapter,
       outputPath: finalOutputPath,
@@ -370,6 +402,7 @@ export async function processChapter(
       fallbackNote,
       logWritten,
       processedInfo,
+      editWorkspace,
     };
   } finally {
     // Cleanup intermediate files
@@ -728,7 +761,7 @@ async function handleCombinePrevious(params: {
   const previousOutputDuration = previousProcessedChapter.processedDuration;
   const endSearchWindow = Math.min(
     previousOutputDuration * 0.3, // Search last 30% of previous chapter
-    CONFIG.commandSilenceSearchSeconds * 2, // Or up to 2x the silence search window
+    EDIT_CONFIG.speechSearchWindowSeconds * 2, // Or up to 2x the silence search window
   );
   const previousEndSearchStart = Math.max(
     0,
@@ -755,7 +788,7 @@ async function handleCombinePrevious(params: {
     duration: previousOutputDuration,
     targetTime: absoluteSpeechEnd,
     direction: "before",
-    maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
+    maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
   });
 
   const rawPreviousEnd = previousTrimEnd ?? absoluteSpeechEnd;
@@ -770,24 +803,25 @@ async function handleCombinePrevious(params: {
     duration: spliceResult.sourceDuration,
     targetTime: currentSpeechBounds.start,
     direction: "after",
-    maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
+    maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
   });
 
   const finalCurrentStart = currentTrimStart ?? currentSpeechBounds.start;
 
   // Apply padding
+  const speechPaddingSeconds = EDIT_CONFIG.speechBoundaryPaddingMs / 1000;
   const previousPaddedEnd = clamp(
-    finalPreviousEnd,
+    finalPreviousEnd + speechPaddingSeconds,
     0,
     previousOutputDuration,
   );
   const currentPaddedStart = clamp(
-    finalCurrentStart - CONFIG.preSpeechPaddingSeconds,
+    finalCurrentStart - speechPaddingSeconds,
     0,
     spliceResult.sourceDuration,
   );
   const currentPaddedEnd = clamp(
-    currentSpeechBounds.end + CONFIG.postSpeechPaddingSeconds,
+    currentSpeechBounds.end + speechPaddingSeconds,
     0,
     spliceResult.sourceDuration,
   );
@@ -899,6 +933,27 @@ async function handleCombinePrevious(params: {
     await safeUnlink(jarvisTranscriptionAudioPath);
   }
 
+  // Step 11: Create edit workspace for combined output
+  let editWorkspace: EditWorkspaceInfo | undefined;
+  if (EDIT_CONFIG.autoCreateEditsDirectory) {
+    const workspace = await createEditWorkspace({
+      outputDir: options.outputDir,
+      sourceVideoPath: finalOutputPath,
+      sourceDuration: combinedDuration,
+      segments: jarvisSegments,
+    });
+    editWorkspace = {
+      chapter: previousProcessedChapter.chapter,
+      outputPath: finalOutputPath,
+      reason: "combine-previous",
+      editsDirectory: workspace.editsDirectory,
+      transcriptTextPath: workspace.transcriptTextPath,
+      transcriptJsonPath: workspace.transcriptJsonPath,
+      originalVideoPath: workspace.originalVideoPath,
+      instructionsPath: workspace.instructionsPath,
+    };
+  }
+
   // Return combined chapter info (using previous chapter's info but with updated duration)
   const processedInfo: ProcessedChapterInfo = {
     chapter: previousProcessedChapter.chapter,
@@ -912,5 +967,6 @@ async function handleCombinePrevious(params: {
     jarvisWarning,
     logWritten: false,
     processedInfo,
+    editWorkspace,
   };
 }

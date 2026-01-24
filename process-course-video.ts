@@ -11,7 +11,13 @@ import {
   processChapter,
   type ChapterProcessingOptions,
 } from "./process-course/chapter-processor";
-import type { JarvisEdit, JarvisNote, JarvisWarning, ProcessedChapterInfo } from "./process-course/types";
+import type {
+  JarvisEdit,
+  JarvisNote,
+  JarvisWarning,
+  ProcessedChapterInfo,
+  EditWorkspaceInfo,
+} from "./process-course/types";
 import { formatSeconds } from "./utils";
 import { checkSegmentHasSpeech } from "./speech-detection";
 
@@ -24,6 +30,7 @@ interface ProcessingSummary {
   fallbackNotes: number;
   logsWritten: number;
   jarvisWarnings: number;
+  editsPending: number;
 }
 
 async function main() {
@@ -164,11 +171,13 @@ async function processInputFile(options: {
     fallbackNotes: 0,
     logsWritten: 0,
     jarvisWarnings: 0,
+    editsPending: 0,
   };
   const summaryDetails: string[] = [];
   const jarvisWarnings: JarvisWarning[] = [];
   const jarvisEdits: JarvisEdit[] = [];
   const jarvisNotes: JarvisNote[] = [];
+  const editWorkspaces: EditWorkspaceInfo[] = [];
 
   const processingOptions: ChapterProcessingOptions = {
     inputPath,
@@ -265,6 +274,11 @@ async function processInputFile(options: {
       jarvisNotes.push(...result.jarvisNotes);
     }
 
+    if (result.editWorkspace) {
+      editWorkspaces.push(result.editWorkspace);
+      summary.editsPending += 1;
+    }
+
     // Update previous processed chapter for combine logic
     if (result.status === "processed" && result.processedInfo) {
       previousProcessedChapter = result.processedInfo;
@@ -301,6 +315,7 @@ async function processInputFile(options: {
     jarvisWarnings,
     jarvisEdits,
     jarvisNotes,
+    editWorkspaces,
     dryRun,
   });
 
@@ -314,6 +329,7 @@ async function processInputFile(options: {
       summaryDetails,
       jarvisWarnings,
       jarvisEdits,
+      editWorkspaces,
       dryRun,
     });
   }

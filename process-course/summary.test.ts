@@ -7,7 +7,13 @@ import {
   buildJarvisWarningLogPath,
   buildSummaryLogPath,
 } from "./paths";
-import type { Chapter, JarvisEdit, JarvisWarning, TimeRange } from "./types";
+import type {
+  Chapter,
+  JarvisEdit,
+  JarvisWarning,
+  TimeRange,
+  EditWorkspaceInfo,
+} from "./types";
 import { writeJarvisLogs, writeSummaryLogs } from "./summary";
 
 async function createTempDir(): Promise<string> {
@@ -34,6 +40,23 @@ function createEdit(index: number, outputPath: string): JarvisEdit {
   return { chapter: createChapter(index), outputPath };
 }
 
+function createEditWorkspace(
+  index: number,
+  outputPath: string,
+  editsDirectory: string,
+): EditWorkspaceInfo {
+  return {
+    chapter: createChapter(index),
+    outputPath,
+    reason: "edit-command",
+    editsDirectory,
+    transcriptTextPath: path.join(editsDirectory, "transcript.txt"),
+    transcriptJsonPath: path.join(editsDirectory, "transcript.json"),
+    originalVideoPath: path.join(editsDirectory, "original.mp4"),
+    instructionsPath: path.join(editsDirectory, "edit-instructions.md"),
+  };
+}
+
 test("writeJarvisLogs writes warning and edit logs", async () => {
   const tmpDir = await createTempDir();
   const outputDir = path.join(tmpDir, "output");
@@ -52,6 +75,13 @@ test("writeJarvisLogs writes warning and edit logs", async () => {
       jarvisWarnings: [warning],
       jarvisEdits: [edit],
       jarvisNotes: [],
+      editWorkspaces: [
+        createEditWorkspace(
+          1,
+          path.join(outputDir, "chapter-02.mp4"),
+          path.join(outputDir, "edits", "chapter-02"),
+        ),
+      ],
       dryRun: false,
     });
 
@@ -89,6 +119,7 @@ test("writeJarvisLogs handles empty warning and edit lists", async () => {
       jarvisWarnings: [],
       jarvisEdits: [],
       jarvisNotes: [],
+      editWorkspaces: [],
       dryRun: false,
     });
 
@@ -122,10 +153,18 @@ test("writeSummaryLogs writes summary file with details", async () => {
         fallbackNotes: 1,
         logsWritten: 2,
         jarvisWarnings: 0,
+        editsPending: 1,
       },
       summaryDetails: ["- Chapter 2 skipped (short)"],
       jarvisWarnings: [],
       jarvisEdits: [],
+      editWorkspaces: [
+        createEditWorkspace(
+          1,
+          path.join(outputDir, "chapter-02.mp4"),
+          path.join(outputDir, "edits", "chapter-02"),
+        ),
+      ],
       dryRun: false,
     });
 
@@ -157,10 +196,12 @@ test("writeSummaryLogs skips writing file in dry run mode", async () => {
         fallbackNotes: 0,
         logsWritten: 0,
         jarvisWarnings: 0,
+        editsPending: 0,
       },
       summaryDetails: [],
       jarvisWarnings: [],
       jarvisEdits: [],
+      editWorkspaces: [],
       dryRun: true,
     });
 
