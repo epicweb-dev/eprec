@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import path from "node:path";
 import os from "node:os";
 import { mkdtemp, rm, mkdir, stat } from "node:fs/promises";
-import { safeUnlink } from "./file-utils";
+import { removeDirIfEmpty, safeUnlink } from "./file-utils";
 
 async function createTempDir(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), "file-utils-"));
@@ -39,6 +39,44 @@ test("safeUnlink does not remove directories", async () => {
     await expect(safeUnlink(nestedDir)).resolves.toBeUndefined();
     const stats = await stat(nestedDir);
     expect(stats.isDirectory()).toBe(true);
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("removeDirIfEmpty removes empty directories", async () => {
+  const tmpDir = await createTempDir();
+  const emptyDir = path.join(tmpDir, "empty");
+  try {
+    await mkdir(emptyDir);
+    const removed = await removeDirIfEmpty(emptyDir);
+    expect(removed).toBe(true);
+    await expect(stat(emptyDir)).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("removeDirIfEmpty keeps directories with files", async () => {
+  const tmpDir = await createTempDir();
+  const filledDir = path.join(tmpDir, "filled");
+  try {
+    await mkdir(filledDir);
+    await Bun.write(path.join(filledDir, "sample.txt"), "data");
+    const removed = await removeDirIfEmpty(filledDir);
+    expect(removed).toBe(false);
+    const stats = await stat(filledDir);
+    expect(stats.isDirectory()).toBe(true);
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("removeDirIfEmpty ignores missing directories", async () => {
+  const tmpDir = await createTempDir();
+  const missingDir = path.join(tmpDir, "missing");
+  try {
+    await expect(removeDirIfEmpty(missingDir)).resolves.toBe(false);
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
   }
