@@ -10,6 +10,7 @@ import {
   extractChapterSegmentAccurate,
   extractTranscriptionAudio,
   renderChapter,
+  readAudioSamples,
 } from "./ffmpeg";
 import {
   buildIntermediateAudioPath,
@@ -20,6 +21,7 @@ import {
 import { logInfo, logWarn, writeChapterLog } from "./logging";
 import { findSilenceBoundary } from "./jarvis-commands/windows";
 import { mergeTimeRanges, buildKeepRanges } from "./utils/time-ranges";
+import { findSpeechEndWithRms, findSpeechStartWithRms } from "./utils/audio-analysis";
 import { safeUnlink } from "./utils/file-utils";
 import { formatChapterFilename } from "./utils/filename";
 import { findWordTimings, transcriptIncludesWord } from "./utils/transcript";
@@ -781,18 +783,32 @@ async function handleCombinePrevious(params: {
   const absoluteSpeechEnd = previousEndSpeechBounds.note
     ? previousEndSpeechBounds.end  // Fallback case: already absolute
     : previousEndSearchStart + previousEndSpeechBounds.end;  // Normal case: convert relative to absolute
+  let effectiveSpeechEnd = absoluteSpeechEnd;
+  if (
+    previousEndSpeechBounds.note ||
+    previousOutputDuration - absoluteSpeechEnd < 0.05
+  ) {
+    const rmsSpeechEnd = await findSpeechEndWithRmsFallback({
+      inputPath: previousProcessedChapter.outputPath,
+      start: previousEndSearchStart,
+      duration: previousOutputDuration - previousEndSearchStart,
+    });
+    if (rmsSpeechEnd !== null) {
+      effectiveSpeechEnd = previousEndSearchStart + rmsSpeechEnd;
+    }
+  }
 
   // Find silence boundary before the end of speech
   const previousTrimEnd = await findSilenceBoundary({
     inputPath: previousProcessedChapter.outputPath,
     duration: previousOutputDuration,
-    targetTime: absoluteSpeechEnd,
+    targetTime: effectiveSpeechEnd,
     direction: "before",
     maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
   });
 
-  const rawPreviousEnd = previousTrimEnd ?? absoluteSpeechEnd;
-  const safePreviousEnd = Math.max(rawPreviousEnd, absoluteSpeechEnd);
+  const rawPreviousEnd = previousTrimEnd ?? effectiveSpeechEnd;
+  const safePreviousEnd = Math.max(rawPreviousEnd, effectiveSpeechEnd);
   const finalPreviousEnd = safePreviousEnd;
 
   // Step 4: Trim start of current chapter at silence boundary
@@ -804,8 +820,19 @@ async function handleCombinePrevious(params: {
     maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
   });
 
-  const rawCurrentStart = currentTrimStart ?? currentSpeechBounds.start;
-  const finalCurrentStart = Math.min(rawCurrentStart, currentSpeechBounds.start);
+  let effectiveSpeechStart = currentSpeechBounds.start;
+  if (currentSpeechBounds.note || currentSpeechBounds.start <= 0.05) {
+    const rmsSpeechStart = await findSpeechStartWithRmsFallback({
+      inputPath: spliceResult.sourcePath,
+      start: 0,
+      duration: spliceResult.sourceDuration,
+    });
+    if (rmsSpeechStart !== null) {
+      effectiveSpeechStart = rmsSpeechStart;
+    }
+  }
+  const rawCurrentStart = currentTrimStart ?? effectiveSpeechStart;
+  const finalCurrentStart = Math.min(rawCurrentStart, effectiveSpeechStart);
 
   // Apply padding
   const speechPaddingSeconds = EDIT_CONFIG.speechBoundaryPaddingMs / 1000;
@@ -968,4 +995,54 @@ async function handleCombinePrevious(params: {
     processedInfo,
     editWorkspace,
   };
+}
+
+async function findSpeechEndWithRmsFallback(options: {
+  inputPath: string;
+  start: number;
+  duration: number;
+}): Promise<number | null> {
+  if (options.duration <= 0.05) {
+    return null;
+  }
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start: options.start,
+    duration: options.duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return null;
+  }
+  return findSpeechEndWithRms({
+    samples,
+    sampleRate: CONFIG.vadSampleRate,
+    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
+    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
+  });
+}
+
+async function findSpeechStartWithRmsFallback(options: {
+  inputPath: string;
+  start: number;
+  duration: number;
+}): Promise<number | null> {
+  if (options.duration <= 0.05) {
+    return null;
+  }
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start: options.start,
+    duration: options.duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return null;
+  }
+  return findSpeechStartWithRms({
+    samples,
+    sampleRate: CONFIG.vadSampleRate,
+    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
+    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
+  });
 }

@@ -5,6 +5,8 @@ import {
   computeRms,
   findSilenceBoundaryFromGaps,
   findSilenceBoundaryWithRms,
+  findSpeechEndWithRms,
+  findSpeechStartWithRms,
   speechFallback,
 } from "./audio-analysis";
 import type { TimeRange } from "../types";
@@ -147,6 +149,46 @@ test("computeMinWindowRms returns 0 for silence", () => {
 test("computeMinWindowRms handles mixed positive and negative", () => {
   const samples = createSamples(1, -1, 1, -1, 0.1, -0.1, 1, -1, 1, -1);
   expect(computeMinWindowRms(samples, 2)).toBeCloseTo(0.1);
+});
+
+test("findSpeechStartWithRms finds first non-silent window", () => {
+  const start = findSpeechStartWithRms({
+    samples: createSamples(0, 0, 0, 1, 1),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+    rmsThreshold: 0.5,
+  });
+  expect(start).toBeCloseTo(0.3, 3);
+});
+
+test("findSpeechStartWithRms returns null for silence", () => {
+  const start = findSpeechStartWithRms({
+    samples: createSamples(0, 0, 0, 0),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+    rmsThreshold: 0.1,
+  });
+  expect(start).toBeNull();
+});
+
+test("findSpeechEndWithRms finds last non-silent window", () => {
+  const end = findSpeechEndWithRms({
+    samples: createSamples(1, 1, 0, 0),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+    rmsThreshold: 0.5,
+  });
+  expect(end).toBeCloseTo(0.2, 3);
+});
+
+test("findSpeechEndWithRms returns null for silence", () => {
+  const end = findSpeechEndWithRms({
+    samples: createSamples(0, 0, 0, 0),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+    rmsThreshold: 0.1,
+  });
+  expect(end).toBeNull();
 });
 
 // buildSilenceGapsFromSpeech tests

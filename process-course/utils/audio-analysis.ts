@@ -42,6 +42,64 @@ export function computeMinWindowRms(
   return Number.isFinite(minRms) ? minRms : 0;
 }
 
+export function findSpeechStartWithRms(options: {
+  samples: Float32Array;
+  sampleRate: number;
+  rmsWindowMs: number;
+  rmsThreshold: number;
+}): number | null {
+  const windowSamples = Math.max(
+    1,
+    Math.round((options.sampleRate * options.rmsWindowMs) / 1000),
+  );
+  const totalWindows = Math.floor(options.samples.length / windowSamples);
+  if (totalWindows === 0) {
+    return null;
+  }
+  for (let index = 0; index < totalWindows; index += 1) {
+    const offset = index * windowSamples;
+    let sumSquares = 0;
+    for (let i = 0; i < windowSamples; i += 1) {
+      const sample = options.samples[offset + i] ?? 0;
+      sumSquares += sample * sample;
+    }
+    const rms = Math.sqrt(sumSquares / windowSamples);
+    if (rms >= options.rmsThreshold) {
+      return (index * windowSamples) / options.sampleRate;
+    }
+  }
+  return null;
+}
+
+export function findSpeechEndWithRms(options: {
+  samples: Float32Array;
+  sampleRate: number;
+  rmsWindowMs: number;
+  rmsThreshold: number;
+}): number | null {
+  const windowSamples = Math.max(
+    1,
+    Math.round((options.sampleRate * options.rmsWindowMs) / 1000),
+  );
+  const totalWindows = Math.floor(options.samples.length / windowSamples);
+  if (totalWindows === 0) {
+    return null;
+  }
+  for (let index = totalWindows - 1; index >= 0; index -= 1) {
+    const offset = index * windowSamples;
+    let sumSquares = 0;
+    for (let i = 0; i < windowSamples; i += 1) {
+      const sample = options.samples[offset + i] ?? 0;
+      sumSquares += sample * sample;
+    }
+    const rms = Math.sqrt(sumSquares / windowSamples);
+    if (rms >= options.rmsThreshold) {
+      return ((index + 1) * windowSamples) / options.sampleRate;
+    }
+  }
+  return null;
+}
+
 /**
  * Build silence gaps from speech segments and total duration.
  */

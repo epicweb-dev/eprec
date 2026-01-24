@@ -3,10 +3,11 @@ import os from "node:os";
 import { copyFile, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { detectSpeechBounds, checkSegmentHasSpeech } from "../../speech-detection";
 import { findSilenceBoundary } from "../jarvis-commands/windows";
-import { extractChapterSegmentAccurate, concatSegments } from "../ffmpeg";
+import { extractChapterSegmentAccurate, concatSegments, readAudioSamples } from "../ffmpeg";
 import { clamp, runCommand } from "../../utils";
-import { EDIT_CONFIG } from "../config";
+import { CONFIG, EDIT_CONFIG } from "../config";
 import { editVideo } from "./video-editor";
+import { findSpeechEndWithRms, findSpeechStartWithRms } from "../utils/audio-analysis";
 
 export interface CombineVideosOptions {
   video1Path: string;
@@ -192,15 +193,26 @@ async function findVideo1TrimEnd(options: {
   const speechEnd = speechBounds.note
     ? speechBounds.end
     : endSearchStart + speechBounds.end;
+  let effectiveSpeechEnd = speechEnd;
+  if (speechBounds.note || options.duration - speechEnd < 0.05) {
+    const rmsSpeechEnd = await findSpeechEndWithRmsFallback({
+      inputPath: options.inputPath,
+      start: endSearchStart,
+      duration: options.duration - endSearchStart,
+    });
+    if (rmsSpeechEnd !== null) {
+      effectiveSpeechEnd = endSearchStart + rmsSpeechEnd;
+    }
+  }
   const silenceBoundary = await findSilenceBoundary({
     inputPath: options.inputPath,
     duration: options.duration,
-    targetTime: speechEnd,
+    targetTime: effectiveSpeechEnd,
     direction: "before",
     maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
   });
-  const rawEnd = silenceBoundary ?? speechEnd;
-  const safeEnd = Math.max(rawEnd, speechEnd);
+  const rawEnd = silenceBoundary ?? effectiveSpeechEnd;
+  const safeEnd = Math.max(rawEnd, effectiveSpeechEnd);
   return clamp(safeEnd + options.paddingSeconds, 0, options.duration);
 }
 
@@ -215,7 +227,17 @@ async function findVideo2Trim(options: {
     options.duration,
     options.duration,
   );
-  const speechStart = speechBounds.start;
+  let speechStart = speechBounds.start;
+  if (speechBounds.note || speechBounds.start <= 0.05) {
+    const rmsSpeechStart = await findSpeechStartWithRmsFallback({
+      inputPath: options.inputPath,
+      start: 0,
+      duration: options.duration,
+    });
+    if (rmsSpeechStart !== null) {
+      speechStart = rmsSpeechStart;
+    }
+  }
   const speechEnd = speechBounds.end;
   const silenceBoundary = await findSilenceBoundary({
     inputPath: options.inputPath,
@@ -277,4 +299,54 @@ async function getMediaDurationSeconds(filePath: string): Promise<number> {
     throw new Error(`Invalid duration for ${filePath}: ${result.stdout}`);
   }
   return duration;
+}
+
+async function findSpeechEndWithRmsFallback(options: {
+  inputPath: string;
+  start: number;
+  duration: number;
+}): Promise<number | null> {
+  if (options.duration <= 0.05) {
+    return null;
+  }
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start: options.start,
+    duration: options.duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return null;
+  }
+  return findSpeechEndWithRms({
+    samples,
+    sampleRate: CONFIG.vadSampleRate,
+    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
+    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
+  });
+}
+
+async function findSpeechStartWithRmsFallback(options: {
+  inputPath: string;
+  start: number;
+  duration: number;
+}): Promise<number | null> {
+  if (options.duration <= 0.05) {
+    return null;
+  }
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start: options.start,
+    duration: options.duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return null;
+  }
+  return findSpeechStartWithRms({
+    samples,
+    sampleRate: CONFIG.vadSampleRate,
+    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
+    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
+  });
 }
