@@ -1,13 +1,8 @@
-import { detectSpeechSegmentsWithVad } from "../../speech-detection";
 import { readAudioSamples } from "../ffmpeg";
 import { CONFIG, EDIT_CONFIG } from "../config";
 import { clamp } from "../../utils";
 import { mergeTimeRanges } from "../utils/time-ranges";
-import {
-  buildSilenceGapsFromSpeech,
-  findSilenceBoundaryFromGaps,
-  findSilenceBoundaryWithRms,
-} from "../utils/audio-analysis";
+import { findSilenceBoundaryProgressive } from "../utils/audio-analysis";
 import type { TimeRange } from "../types";
 import type { TranscriptWordWithIndex } from "./types";
 
@@ -28,34 +23,61 @@ export async function refineRemovalRange(options: {
   paddingMs?: number;
 }): Promise<RefinedRange> {
   const paddingSeconds = (options.paddingMs ?? EDIT_CONFIG.speechBoundaryPaddingMs) / 1000;
-  const refinedStart =
-    (await findSpeechBoundary({
-      inputPath: options.inputPath,
-      duration: options.duration,
-      targetTime: options.range.start,
-      direction: "before",
-      searchWindowSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
-    })) ?? options.range.start;
-  const refinedEnd =
-    (await findSpeechBoundary({
-      inputPath: options.inputPath,
-      duration: options.duration,
-      targetTime: options.range.end,
-      direction: "after",
-      searchWindowSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
-    })) ?? options.range.end;
-  const paddedStart = clamp(refinedStart + paddingSeconds, 0, options.duration);
-  const paddedEnd = clamp(refinedEnd - paddingSeconds, 0, options.duration);
-  const adjustedStart = Math.min(paddedStart, options.range.start);
-  const adjustedEnd = Math.max(paddedEnd, options.range.end);
+  const silenceStart = await findSilenceBoundary({
+    inputPath: options.inputPath,
+    duration: options.duration,
+    targetTime: options.range.start,
+    direction: "before",
+  });
+  if (silenceStart === null) {
+    throw new Error(
+      buildSilenceError({
+        direction: "before",
+        targetTime: options.range.start,
+        maxWindowSeconds: getMaxSilenceSearchSeconds({
+          duration: options.duration,
+          targetTime: options.range.start,
+          direction: "before",
+        }),
+      }),
+    );
+  }
+  const silenceEnd = await findSilenceBoundary({
+    inputPath: options.inputPath,
+    duration: options.duration,
+    targetTime: options.range.end,
+    direction: "after",
+  });
+  if (silenceEnd === null) {
+    throw new Error(
+      buildSilenceError({
+        direction: "after",
+        targetTime: options.range.end,
+        maxWindowSeconds: getMaxSilenceSearchSeconds({
+          duration: options.duration,
+          targetTime: options.range.end,
+          direction: "after",
+        }),
+      }),
+    );
+  }
 
-  if (adjustedEnd <= adjustedStart + 0.005) {
-    return { original: options.range, refined: options.range };
+  const paddedStart = clamp(silenceStart + paddingSeconds, 0, options.duration);
+  const paddedEnd = clamp(silenceEnd - paddingSeconds, 0, options.duration);
+  const refinedStart =
+    paddedStart <= options.range.start ? paddedStart : silenceStart;
+  const refinedEnd =
+    paddedEnd >= options.range.end ? paddedEnd : silenceEnd;
+
+  if (refinedEnd <= refinedStart + 0.005) {
+    throw new Error(
+      `Unable to create a non-empty cut around ${options.range.start.toFixed(3)}s-${options.range.end.toFixed(3)}s.`,
+    );
   }
 
   return {
     original: options.range,
-    refined: { start: adjustedStart, end: adjustedEnd },
+    refined: { start: refinedStart, end: refinedEnd },
   };
 }
 
@@ -81,21 +103,24 @@ export async function refineAllRemovalRanges(options: {
 
 type SpeechBoundaryDirection = "before" | "after";
 
-async function findSpeechBoundary(options: {
+async function findSilenceBoundary(options: {
   inputPath: string;
   duration: number;
   targetTime: number;
   direction: SpeechBoundaryDirection;
-  searchWindowSeconds: number;
 }): Promise<number | null> {
+  const maxWindowSeconds = getMaxSilenceSearchSeconds(options);
+  if (maxWindowSeconds <= 0.01) {
+    return null;
+  }
   const windowStart =
     options.direction === "before"
-      ? Math.max(0, options.targetTime - options.searchWindowSeconds)
+      ? Math.max(0, options.targetTime - maxWindowSeconds)
       : options.targetTime;
   const windowEnd =
     options.direction === "before"
       ? options.targetTime
-      : Math.min(options.duration, options.targetTime + options.searchWindowSeconds);
+      : Math.min(options.duration, options.targetTime + maxWindowSeconds);
   const windowDuration = windowEnd - windowStart;
   if (windowDuration <= 0.01) {
     return null;
@@ -110,79 +135,37 @@ async function findSpeechBoundary(options: {
     return null;
   }
 
-  const targetOffset = options.targetTime - windowStart;
-  const speechSegments = await loadSpeechSegments(samples);
-  if (speechSegments.length > 0) {
-    if (options.direction === "before") {
-      const candidate = [...speechSegments]
-        .filter((segment) => segment.end <= targetOffset + 0.001)
-        .pop();
-      if (candidate) {
-        return windowStart + candidate.end;
-      }
-    } else {
-      const candidate = speechSegments.find(
-        (segment) => segment.start >= targetOffset - 0.001,
-      );
-      if (candidate) {
-        return windowStart + candidate.start;
-      }
-    }
-  }
-
-  const gapBoundary = findBoundaryFromSilence(
-    samples,
-    windowDuration,
-    speechSegments,
-    {
-      direction: options.direction,
-      targetOffset,
-    },
-  );
-  return gapBoundary === null ? null : windowStart + gapBoundary;
-}
-
-async function loadSpeechSegments(samples: Float32Array): Promise<TimeRange[]> {
-  try {
-    const segments = await detectSpeechSegmentsWithVad(
-      samples,
-      CONFIG.vadSampleRate,
-      CONFIG,
-    );
-    return segments.map((segment) => ({
-      start: segment.start,
-      end: segment.end,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function findBoundaryFromSilence(
-  samples: Float32Array,
-  duration: number,
-  speechSegments: TimeRange[],
-  options: {
-    direction: SpeechBoundaryDirection;
-    targetOffset: number;
-  },
-): number | null {
-  const gaps = buildSilenceGapsFromSpeech(speechSegments, duration);
-  const boundaryFromGaps = findSilenceBoundaryFromGaps(
-    gaps,
-    options.targetOffset,
-    options.direction,
-  );
-  if (boundaryFromGaps !== null) {
-    return boundaryFromGaps;
-  }
-
-  return findSilenceBoundaryWithRms({
+  const boundary = findSilenceBoundaryProgressive({
     samples,
     sampleRate: CONFIG.vadSampleRate,
     direction: options.direction,
     rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
     rmsThreshold: CONFIG.commandSilenceRmsThreshold,
     minSilenceMs: CONFIG.commandSilenceMinDurationMs,
+    startWindowSeconds: EDIT_CONFIG.silenceSearchStartSeconds,
+    stepSeconds: EDIT_CONFIG.silenceSearchStepSeconds,
+    maxWindowSeconds: windowDuration,
   });
+  return boundary === null ? null : windowStart + boundary;
+}
+
+function buildSilenceError(options: {
+  direction: SpeechBoundaryDirection;
+  targetTime: number;
+  maxWindowSeconds: number;
+}): string {
+  const directionLabel = options.direction === "before" ? "before" : "after";
+  return `No low-amplitude boundary found ${directionLabel} ${options.targetTime.toFixed(3)}s within ${options.maxWindowSeconds.toFixed(2)}s.`;
+}
+
+function getMaxSilenceSearchSeconds(options: {
+  duration: number;
+  targetTime: number;
+  direction: SpeechBoundaryDirection;
+}): number {
+  const availableSeconds =
+    options.direction === "before"
+      ? options.targetTime
+      : options.duration - options.targetTime;
+  return Math.min(EDIT_CONFIG.silenceSearchMaxSeconds, availableSeconds);
 }

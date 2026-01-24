@@ -36,6 +36,9 @@ export const CONFIG = {
 export const EDIT_CONFIG = {
   speechBoundaryPaddingMs: 125,
   speechSearchWindowSeconds: 2.0,
+  silenceSearchStartSeconds: 0.1,
+  silenceSearchStepSeconds: 0.1,
+  silenceSearchMaxSeconds: 2.0,
   autoCreateEditsDirectory: true,
   keepEditIntermediates: false,
 } as const;

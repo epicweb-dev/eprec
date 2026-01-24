@@ -227,6 +227,82 @@ export function findSilenceBoundaryWithRms(options: {
   return null;
 }
 
+export function findSilenceBoundaryProgressive(options: {
+  samples: Float32Array;
+  sampleRate: number;
+  direction: SilenceBoundaryDirection;
+  startWindowSeconds: number;
+  stepSeconds: number;
+  maxWindowSeconds: number;
+  rmsWindowMs: number;
+  rmsThreshold: number;
+  minSilenceMs: number;
+}): number | null {
+  if (options.samples.length === 0 || options.sampleRate <= 0) {
+    return null;
+  }
+  const totalSeconds = options.samples.length / options.sampleRate;
+  const maxWindowSeconds = Math.min(
+    options.maxWindowSeconds,
+    totalSeconds,
+  );
+  if (maxWindowSeconds <= 0.01) {
+    return null;
+  }
+  const startWindowSeconds = Math.min(
+    Math.max(options.startWindowSeconds, 0.01),
+    maxWindowSeconds,
+  );
+  const stepSeconds = Math.max(options.stepSeconds, 0.01);
+  const totalSamples = options.samples.length;
+
+  for (
+    let windowSeconds = startWindowSeconds;
+    windowSeconds <= maxWindowSeconds + 1e-6;
+    windowSeconds = Math.min(maxWindowSeconds, windowSeconds + stepSeconds)
+  ) {
+    const windowSamples = Math.max(
+      1,
+      Math.round(windowSeconds * options.sampleRate),
+    );
+    if (options.direction === "before") {
+      const startIndex = Math.max(0, totalSamples - windowSamples);
+      const slice = options.samples.subarray(startIndex, totalSamples);
+      const boundary = findSilenceBoundaryWithRms({
+        samples: slice,
+        sampleRate: options.sampleRate,
+        direction: options.direction,
+        rmsWindowMs: options.rmsWindowMs,
+        rmsThreshold: options.rmsThreshold,
+        minSilenceMs: options.minSilenceMs,
+      });
+      if (boundary !== null) {
+        const windowStartOffset = totalSeconds - windowSeconds;
+        return windowStartOffset + boundary;
+      }
+    } else {
+      const slice = options.samples.subarray(0, windowSamples);
+      const boundary = findSilenceBoundaryWithRms({
+        samples: slice,
+        sampleRate: options.sampleRate,
+        direction: options.direction,
+        rmsWindowMs: options.rmsWindowMs,
+        rmsThreshold: options.rmsThreshold,
+        minSilenceMs: options.minSilenceMs,
+      });
+      if (boundary !== null) {
+        return boundary;
+      }
+    }
+
+    if (windowSeconds >= maxWindowSeconds) {
+      break;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Find speech end using RMS analysis with audio sample loading fallback.
  */

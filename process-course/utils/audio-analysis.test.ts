@@ -4,6 +4,7 @@ import {
   computeMinWindowRms,
   computeRms,
   findSilenceBoundaryFromGaps,
+  findSilenceBoundaryProgressive,
   findSilenceBoundaryWithRms,
   findSpeechEndWithRms,
   findSpeechStartWithRms,
@@ -45,6 +46,34 @@ function createRmsOptions(
     rmsWindowMs: overrides.rmsWindowMs ?? 100,
     rmsThreshold: overrides.rmsThreshold ?? 0.5,
     minSilenceMs: overrides.minSilenceMs ?? 200,
+  };
+}
+
+function createProgressiveOptions(
+  samples: number[],
+  direction: "before" | "after",
+  overrides: Partial<{
+    sampleRate: number;
+    startWindowSeconds: number;
+    stepSeconds: number;
+    maxWindowSeconds: number;
+    rmsWindowMs: number;
+    rmsThreshold: number;
+    minSilenceMs: number;
+  }> = {},
+) {
+  const sampleRate = overrides.sampleRate ?? 10;
+  const maxWindowSeconds = overrides.maxWindowSeconds ?? samples.length / sampleRate;
+  return {
+    samples: createSamples(...samples),
+    sampleRate,
+    direction,
+    startWindowSeconds: overrides.startWindowSeconds ?? 0.2,
+    stepSeconds: overrides.stepSeconds ?? 0.2,
+    maxWindowSeconds,
+    rmsWindowMs: overrides.rmsWindowMs ?? 100,
+    rmsThreshold: overrides.rmsThreshold ?? 0.5,
+    minSilenceMs: overrides.minSilenceMs ?? 100,
   };
 }
 
@@ -257,4 +286,23 @@ test("findSilenceBoundaryWithRms finds silence end for before direction", () => 
 test("findSilenceBoundaryWithRms returns null when silence is too short", () => {
   const options = createRmsOptions([1, 0, 1, 1], "after");
   expect(findSilenceBoundaryWithRms(options)).toBeNull();
+});
+
+test("findSilenceBoundaryProgressive widens window until silence is found", () => {
+  const options = createProgressiveOptions(
+    [1, 1, 1, 1, 1, 0, 0, 1, 1, 1],
+    "before",
+    { startWindowSeconds: 0.2, stepSeconds: 0.2, maxWindowSeconds: 1 },
+  );
+  const boundary = findSilenceBoundaryProgressive(options);
+  expect(boundary).toBeCloseTo(0.7, 3);
+});
+
+test("findSilenceBoundaryProgressive returns null when no silence exists", () => {
+  const options = createProgressiveOptions([1, 1, 1, 1, 1], "after", {
+    startWindowSeconds: 0.2,
+    stepSeconds: 0.2,
+    maxWindowSeconds: 0.5,
+  });
+  expect(findSilenceBoundaryProgressive(options)).toBeNull();
 });
