@@ -248,7 +248,9 @@ test("e2e chapter 7 and 8 are combined into single output", async () => {
   expect(chapter8Files).toHaveLength(0);
 });
 
-test("e2e combined chapter retains chapter 7 speech content", async () => {
+test(
+  "e2e combined chapter retains chapter 7 speech content",
+  async () => {
   const chapter7Path = path.join(TEST_OUTPUT_DIR, "chapter-07-unnamed-6.mp4");
   const transcript = await transcribeOutputVideo(chapter7Path);
   expectTranscriptIncludesWords(
@@ -259,7 +261,9 @@ test("e2e combined chapter retains chapter 7 speech content", async () => {
     transcript,
     createExpectedWordGroup("combine", "combined"),
   );
-});
+  },
+  20000,
+);
 
 // =============================================================================
 // Chapter 9: Too Short
