@@ -1,0 +1,37 @@
+# Commit convention
+
+This repo uses Conventional Commits so semantic-release can automate versions
+and changelogs.
+
+## Format
+
+`type(scope): summary`
+
+- `type` is required.
+- `scope` is optional and should be a short area name (ex. `cli`, `docs`).
+- `summary` is short, imperative, and lower case.
+
+## Types
+
+- `feat`: new feature (minor release)
+- `fix`: bug fix (patch release)
+- `docs`: documentation only
+- `chore`: maintenance work
+- `refactor`: code change that neither fixes a bug nor adds a feature
+- `test`: tests only
+- `build`: build system changes
+- `ci`: CI workflow changes
+- `perf`: performance improvements
+
+## Breaking changes
+
+Use one of these to trigger a major release:
+
+- Add `!` after the type: `feat!: drop legacy cli`
+- Add a footer line: `BREAKING CHANGE: drop legacy cli`
+
+## Examples
+
+- `feat(cli): add chapter selection flag`
+- `fix(ffmpeg): handle empty chapter list`
+- `docs: add release instructions`

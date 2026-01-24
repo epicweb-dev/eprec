@@ -1,4 +1,6 @@
-# epic-recording
+# @epic-web/recording
+
+CLI name: `eprec`.
 
 A Bun-based CLI that processes recorded course videos by splitting chapter markers into separate files, trimming silence at the start/end, and optionally removing spoken "Jarvis" command windows via transcript timestamps refined with audio-based silence detection.
 
@@ -14,8 +16,8 @@ A Bun-based CLI that processes recorded course videos by splitting chapter marke
 ## Quick Start
 
 ```bash
-bun install
-bun process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
+bun add -g @epic-web/recording
+eprec "/path/to/input.mp4" "/path/to/output" \
   --enable-transcription \
   --keep-intermediates \
   --write-logs
@@ -26,12 +28,12 @@ bun process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
 | Option | Alias | Description | Default |
 |--------|-------|-------------|---------|
 | `input` | | Input video file (mp4/mkv) | *required* |
-| `outputDir` | | Output directory | `output` |
+| `output-dir` | `-o` | Output directory | auto (next to input) |
 | `--min-chapter-seconds` | `-m` | Skip chapters shorter than this | `15` |
 | `--dry-run` | `-d` | Don't write files or run ffmpeg | `false` |
 | `--keep-intermediates` | `-k` | Keep `.tmp` files for debugging | `false` |
 | `--write-logs` | `-l` | Write log files for skips/fallbacks | `false` |
-| `--enable-transcription` | | Run whisper.cpp for command detection | `false` |
+| `--enable-transcription` | | Run whisper.cpp for command detection | `true` |
 | `--whisper-model-path` | | Path to whisper.cpp model file | auto-cached |
 | `--whisper-language` | | Language for whisper | `en` |
 | `--whisper-binary-path` | | Path to `whisper-cli` binary | system PATH |
@@ -136,7 +138,7 @@ Models are automatically downloaded and cached:
 
 | File | Description |
 |------|-------------|
-| `process-course-video.ts` | Main CLI entry point |
+| `process-course-video.ts` | Main CLI entry point (exposed as `eprec`) |
 | `process-course/config.ts` | Shared constants and tuning parameters |
 | `process-course/logging.ts` | CLI logging helpers |
 | `process-course/paths.ts` | Output/intermediate path helpers |

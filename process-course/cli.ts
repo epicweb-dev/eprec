@@ -31,7 +31,7 @@ export function parseCliArgs(): CliArgs {
   const rawArgs = hideBin(process.argv);
   const defaultWhisperModelPath = getDefaultWhisperModelPath();
   const parser = yargs(rawArgs)
-    .scriptName("process-course-video")
+    .scriptName("eprec")
     .usage(
       "Usage: $0 <input.mp4|input.mkv> [input2.mp4 ...] [output-dir] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]\n  If the last positional argument doesn't have a video extension, it's treated as the output directory.",
     )
@@ -162,12 +162,20 @@ export function parseCliArgs(): CliArgs {
       : null;
 
   if (!outputDir && inputPaths.length > 0) {
-    const lastArg = inputPaths[inputPaths.length - 1];
-    const videoExtensions = [".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".m4v"];
+    const lastArg = inputPaths[inputPaths.length - 1]!;
+    const videoExtensions = [
+      ".mp4",
+      ".mkv",
+      ".avi",
+      ".mov",
+      ".webm",
+      ".flv",
+      ".m4v",
+    ];
     const hasVideoExtension = videoExtensions.some((ext) =>
       lastArg.toLowerCase().endsWith(ext),
     );
-    
+
     if (!hasVideoExtension) {
       // Last argument is likely the output directory
       outputDir = lastArg;
