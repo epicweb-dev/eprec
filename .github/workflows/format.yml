@@ -2,7 +2,7 @@ name: Auto Format
 
 on:
   workflow_run:
-    workflows: ["Test"]
+    workflows: ['Test']
     types:
       - completed
     branches: [main]
@@ -30,7 +30,9 @@ jobs:
       - name: ⬇️ Checkout repo
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+          ref:
+            ${{ github.event_name == 'workflow_run' &&
+            github.event.workflow_run.head_branch || github.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
