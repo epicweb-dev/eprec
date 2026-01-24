@@ -204,6 +204,7 @@ export async function processChapter(
             chapter,
             previousProcessedChapter: options.previousProcessedChapter,
             commandWindows,
+            commandNotes,
             normalizedPath: paths.normalizedPath,
             rawDuration,
             tmpDir: options.tmpDir,
@@ -702,6 +703,7 @@ async function handleCombinePrevious(params: {
   chapter: Chapter;
   previousProcessedChapter: ProcessedChapterInfo;
   commandWindows: TimeRange[];
+  commandNotes: Array<{ value: string; window: TimeRange }>;
   normalizedPath: string;
   rawDuration: number;
   tmpDir: string;
@@ -713,6 +715,7 @@ async function handleCombinePrevious(params: {
     chapter,
     previousProcessedChapter,
     commandWindows,
+    commandNotes,
     normalizedPath,
     rawDuration,
     tmpDir,
@@ -988,6 +991,14 @@ async function handleCombinePrevious(params: {
     };
   }
 
+  // Step 12: Track note commands from current chapter
+  const jarvisNotes: JarvisNote[] = commandNotes.map((note) => ({
+    chapter: previousProcessedChapter.chapter,
+    outputPath: finalOutputPath,
+    note: note.value,
+    timestamp: note.window.start,
+  }));
+
   // Return combined chapter info (using previous chapter's info but with updated duration)
   const processedInfo: ProcessedChapterInfo = {
     chapter: previousProcessedChapter.chapter,
@@ -999,6 +1010,7 @@ async function handleCombinePrevious(params: {
   return {
     status: "processed",
     jarvisWarning,
+    jarvisNotes: jarvisNotes.length > 0 ? jarvisNotes : undefined,
     logWritten: false,
     processedInfo,
     editWorkspace,
