@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import * as ort from "onnxruntime-node";
 import { readAudioSamples } from "./process-course/ffmpeg";
 import { CONFIG } from "./process-course/config";
-import { formatSeconds } from "./utils";
+import { formatSeconds, getMediaDurationSeconds } from "./utils";
 import { speechFallback } from "./process-course/utils/audio-analysis";
 import type { SpeechBounds } from "./process-course/types";
 
@@ -17,7 +17,9 @@ export type VadConfig = {
   vadModelUrl: string;
 };
 
-type VadSegment = { start: number; end: number };
+export type SpeechSegment = { start: number; end: number };
+
+type VadSegment = SpeechSegment;
 
 let vadSessionPromise: Promise<ort.InferenceSession> | null = null;
 
@@ -34,6 +36,42 @@ export async function detectSpeechSegmentsWithVad(
     vadSession,
   );
   return probabilitiesToSegments(samples.length, probabilities, sampleRate, config);
+}
+
+export async function detectSpeechSegmentsForFile(options: {
+  inputPath: string;
+  start?: number;
+  end?: number;
+}): Promise<SpeechSegment[]> {
+  const start = options.start ?? 0;
+  if (!Number.isFinite(start) || start < 0) {
+    throw new Error("Start time must be a non-negative number.");
+  }
+  const durationSeconds = await getMediaDurationSeconds(options.inputPath);
+  const end = options.end ?? durationSeconds;
+  if (!Number.isFinite(end) || end <= start) {
+    throw new Error("End time must be greater than start time.");
+  }
+  const duration = end - start;
+
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start,
+    duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return [];
+  }
+  const segments = await detectSpeechSegmentsWithVad(
+    samples,
+    CONFIG.vadSampleRate,
+    CONFIG,
+  );
+  return segments.map((segment) => ({
+    start: segment.start + start,
+    end: segment.end + start,
+  }));
 }
 
 async function getVadSession(config: VadConfig) {

@@ -7,6 +7,9 @@
     "test:e2e": "bun test e2e",
     "test:all": "bun test"
   },
+  "bin": {
+    "eprec": "./cli.ts"
+  },
   "prettier": "@epic-web/config/prettier",
   "devDependencies": {
     "@epic-web/config": "^1.21.3",

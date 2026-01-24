@@ -27,126 +27,84 @@ export interface CliArgs {
   shouldExit: boolean;
 }
 
-export function parseCliArgs(): CliArgs {
-  const rawArgs = hideBin(process.argv);
-  const defaultWhisperModelPath = getDefaultWhisperModelPath();
-  const parser = yargs(rawArgs)
-    .scriptName("process-course-video")
-    .usage(
-      "Usage: $0 <input.mp4|input.mkv> [input2.mp4 ...] [output-dir] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]\n  If the last positional argument doesn't have a video extension, it's treated as the output directory.",
-    )
-    .command(
-      "$0 <input...>",
-      "Process chapters into separate files",
-      (command: Argv) =>
-        command
-          .positional("input", {
-            type: "string",
-            array: true,
-            describe: "Input video file(s)",
-          })
-          .option("output-dir", {
-            type: "string",
-            alias: "o",
-            describe: "Output directory (optional - if not specified, creates directory next to each input file)",
-          })
-          .option("min-chapter-seconds", {
-            type: "number",
-            alias: "m",
-            describe: "Skip chapters shorter than this duration in seconds",
-            default: DEFAULT_MIN_CHAPTER_SECONDS,
-          })
-          .option("dry-run", {
-            type: "boolean",
-            alias: "d",
-            describe: "Skip writing output files and running ffmpeg",
-            default: false,
-          })
-          .option("keep-intermediates", {
-            type: "boolean",
-            alias: "k",
-            describe: "Keep intermediate files for debugging",
-            default: false,
-          })
-          .option("write-logs", {
-            type: "boolean",
-            alias: "l",
-            describe: "Write log files when skipping/fallbacks happen",
-            default: false,
-          })
-          .option("enable-transcription", {
-            type: "boolean",
-            describe: "Enable whisper.cpp transcription skip checks",
-            default: true,
-          })
-          .option("whisper-model-path", {
-            type: "string",
-            describe: "Path to whisper.cpp model file",
-            default: defaultWhisperModelPath,
-          })
-          .option("whisper-language", {
-            type: "string",
-            describe: "Language passed to whisper.cpp",
-            default: "en",
-          })
-          .option("whisper-binary-path", {
-            type: "string",
-            describe: "Path to whisper.cpp CLI (whisper-cli)",
-          })
-          .option("whisper-skip-phrase", {
-            type: "string",
-            array: true,
-            describe:
-              "Phrase to skip chapters when found in transcript (repeatable)",
-            default: TRANSCRIPTION_PHRASES,
-          })
-          .option("chapter", {
-            type: "string",
-            array: true,
-            alias: "c",
-            describe:
-              "Only process selected chapters (e.g. 4, 4-6, 4,6,9-12, 4-*)",
-          }),
-    )
-    .check((args: Arguments) => {
-      const minChapterSeconds = args["min-chapter-seconds"];
-      if (minChapterSeconds !== undefined) {
-        if (
-          typeof minChapterSeconds !== "number" ||
-          !Number.isFinite(minChapterSeconds) ||
-          minChapterSeconds < 0
-        ) {
-          throw new Error("min-chapter-seconds must be a non-negative number.");
-        }
-      }
-      return true;
+export function configureProcessCommand(
+  command: Argv,
+  defaultWhisperModelPath = getDefaultWhisperModelPath(),
+) {
+  return command
+    .positional("input", {
+      type: "string",
+      array: true,
+      describe: "Input video file(s)",
     })
-    .strict()
-    .help();
-
-  if (rawArgs.length === 0) {
-    parser.showHelp((message) => {
-      console.log(message);
+    .option("output-dir", {
+      type: "string",
+      alias: "o",
+      describe:
+        "Output directory (optional - if not specified, creates directory next to each input file)",
+    })
+    .option("min-chapter-seconds", {
+      type: "number",
+      alias: "m",
+      describe: "Skip chapters shorter than this duration in seconds",
+      default: DEFAULT_MIN_CHAPTER_SECONDS,
+    })
+    .option("dry-run", {
+      type: "boolean",
+      alias: "d",
+      describe: "Skip writing output files and running ffmpeg",
+      default: false,
+    })
+    .option("keep-intermediates", {
+      type: "boolean",
+      alias: "k",
+      describe: "Keep intermediate files for debugging",
+      default: false,
+    })
+    .option("write-logs", {
+      type: "boolean",
+      alias: "l",
+      describe: "Write log files when skipping/fallbacks happen",
+      default: false,
+    })
+    .option("enable-transcription", {
+      type: "boolean",
+      describe: "Enable whisper.cpp transcription skip checks",
+      default: true,
+    })
+    .option("whisper-model-path", {
+      type: "string",
+      describe: "Path to whisper.cpp model file",
+      default: defaultWhisperModelPath,
+    })
+    .option("whisper-language", {
+      type: "string",
+      describe: "Language passed to whisper.cpp",
+      default: "en",
+    })
+    .option("whisper-binary-path", {
+      type: "string",
+      describe: "Path to whisper.cpp CLI (whisper-cli)",
+    })
+    .option("whisper-skip-phrase", {
+      type: "string",
+      array: true,
+      describe: "Phrase to skip chapters when found in transcript (repeatable)",
+      default: TRANSCRIPTION_PHRASES,
+    })
+    .option("chapter", {
+      type: "string",
+      array: true,
+      alias: "c",
+      describe:
+        "Only process selected chapters (e.g. 4, 4-6, 4,6,9-12, 4-*)",
     });
-    return {
-      inputPaths: [],
-      outputDir: null,
-      minChapterDurationSeconds: DEFAULT_MIN_CHAPTER_SECONDS,
-      dryRun: false,
-      keepIntermediates: false,
-      writeLogs: false,
-      enableTranscription: true,
-      whisperModelPath: defaultWhisperModelPath,
-      whisperLanguage: "en",
-      whisperBinaryPath: undefined,
-      whisperSkipPhrases: TRANSCRIPTION_PHRASES,
-      chapterSelection: null,
-      shouldExit: true,
-    };
-  }
+}
 
-  const argv = parser.parseSync();
-
+export function normalizeProcessArgs(
+  argv: Arguments,
+  defaultWhisperModelPath = getDefaultWhisperModelPath(),
+): CliArgs {
   let inputPaths = Array.isArray(argv.input)
     ? argv.input.filter((p): p is string => typeof p === "string")
     : typeof argv.input === "string"
@@ -162,16 +120,26 @@ export function parseCliArgs(): CliArgs {
       : null;
 
   if (!outputDir && inputPaths.length > 0) {
-    const lastArg = inputPaths[inputPaths.length - 1];
-    const videoExtensions = [".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".m4v"];
-    const hasVideoExtension = videoExtensions.some((ext) =>
-      lastArg.toLowerCase().endsWith(ext),
-    );
-    
-    if (!hasVideoExtension) {
-      // Last argument is likely the output directory
-      outputDir = lastArg;
-      inputPaths = inputPaths.slice(0, -1); // Remove the last argument from inputs
+    const outputCandidate = inputPaths.at(-1);
+    if (outputCandidate !== undefined) {
+      const videoExtensions = [
+        ".mp4",
+        ".mkv",
+        ".avi",
+        ".mov",
+        ".webm",
+        ".flv",
+        ".m4v",
+      ];
+      const hasVideoExtension = videoExtensions.some((ext) =>
+        outputCandidate.toLowerCase().endsWith(ext),
+      );
+
+      if (!hasVideoExtension) {
+        // Last argument is likely the output directory
+        outputDir = outputCandidate;
+        inputPaths = inputPaths.slice(0, -1); // Remove the last argument from inputs
+      }
     }
   }
 
@@ -215,4 +183,58 @@ export function parseCliArgs(): CliArgs {
       argv.chapter === undefined ? null : parseChapterSelection(argv.chapter),
     shouldExit: false,
   } as CliArgs;
+}
+
+export function parseCliArgs(rawArgs = hideBin(process.argv)): CliArgs {
+  const defaultWhisperModelPath = getDefaultWhisperModelPath();
+  const parser = yargs(rawArgs)
+    .scriptName("process-course-video")
+    .usage(
+      "Usage: $0 <input.mp4|input.mkv> [input2.mp4 ...] [output-dir] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]\n  If the last positional argument doesn't have a video extension, it's treated as the output directory.",
+    )
+    .command(
+      "$0 <input...>",
+      "Process chapters into separate files",
+      (command: Argv) =>
+        configureProcessCommand(command, defaultWhisperModelPath),
+    )
+    .check((args: Arguments) => {
+      const minChapterSeconds = args["min-chapter-seconds"];
+      if (minChapterSeconds !== undefined) {
+        if (
+          typeof minChapterSeconds !== "number" ||
+          !Number.isFinite(minChapterSeconds) ||
+          minChapterSeconds < 0
+        ) {
+          throw new Error("min-chapter-seconds must be a non-negative number.");
+        }
+      }
+      return true;
+    })
+    .strict()
+    .help();
+
+  if (rawArgs.length === 0) {
+    parser.showHelp((message) => {
+      console.log(message);
+    });
+    return {
+      inputPaths: [],
+      outputDir: null,
+      minChapterDurationSeconds: DEFAULT_MIN_CHAPTER_SECONDS,
+      dryRun: false,
+      keepIntermediates: false,
+      writeLogs: false,
+      enableTranscription: true,
+      whisperModelPath: defaultWhisperModelPath,
+      whisperLanguage: "en",
+      whisperBinaryPath: undefined,
+      whisperSkipPhrases: TRANSCRIPTION_PHRASES,
+      chapterSelection: null,
+      shouldExit: true,
+    };
+  }
+
+  const argv = parser.parseSync();
+  return normalizeProcessArgs(argv, defaultWhisperModelPath);
 }

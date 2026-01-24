@@ -3,7 +3,7 @@ import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { ensureFfmpegAvailable, getChapters } from "./process-course/ffmpeg";
 import { logInfo } from "./process-course/logging";
-import { parseCliArgs } from "./process-course/cli";
+import { parseCliArgs, type CliArgs } from "./process-course/cli";
 import { resolveChapterSelection } from "./process-course/utils/chapter-selection";
 import { removeDirIfEmpty } from "./process-course/utils/file-utils";
 import { writeJarvisLogs, writeSummaryLogs } from "./process-course/summary";
@@ -33,12 +33,9 @@ interface ProcessingSummary {
   editsPending: number;
 }
 
-async function main() {
-  const parsedArgs = parseCliArgs();
-  if (parsedArgs.shouldExit) {
-    return;
-  }
+export type ProcessCourseOptions = Omit<CliArgs, "shouldExit">;
 
+export async function runProcessCourse(options: ProcessCourseOptions) {
   const {
     inputPaths,
     outputDir,
@@ -51,7 +48,7 @@ async function main() {
     whisperModelPath,
     whisperLanguage,
     whisperBinaryPath,
-  } = parsedArgs;
+  } = options;
 
   await ensureFfmpegAvailable();
 
@@ -88,6 +85,15 @@ async function main() {
       whisperBinaryPath,
     });
   }
+}
+
+export async function runProcessCourseCli(rawArgs?: string[]) {
+  const parsedArgs = parseCliArgs(rawArgs);
+  if (parsedArgs.shouldExit) {
+    return;
+  }
+
+  await runProcessCourse(parsedArgs);
 }
 
 async function processInputFile(options: {
@@ -200,19 +206,17 @@ async function processInputFile(options: {
   for (const chapter of selectedChapters) {
     // Determine which chapter to combine with
     // Always use the most recent processed chapter with speech (if any)
-    let chapterToCombineWith: ProcessedChapterInfo | null = null;
-    if (processedChaptersWithSpeech.length > 0) {
-      chapterToCombineWith =
-        processedChaptersWithSpeech[processedChaptersWithSpeech.length - 1];
-      // If previousProcessedChapter exists but is different, log that we're skipping it
-      if (
-        previousProcessedChapter &&
-        previousProcessedChapter !== chapterToCombineWith
-      ) {
-        logInfo(
-          `Previous chapter ${previousProcessedChapter.chapter.index + 1} has no speech. Using chapter ${chapterToCombineWith.chapter.index + 1} for combine instead.`,
-        );
-      }
+    const chapterToCombineWith: ProcessedChapterInfo | null =
+      processedChaptersWithSpeech.at(-1) ?? null;
+    // If previousProcessedChapter exists but is different, log that we're skipping it
+    if (
+      chapterToCombineWith !== null &&
+      previousProcessedChapter !== null &&
+      previousProcessedChapter !== chapterToCombineWith
+    ) {
+      logInfo(
+        `Previous chapter ${previousProcessedChapter.chapter.index + 1} has no speech. Using chapter ${chapterToCombineWith.chapter.index + 1} for combine instead.`,
+      );
     }
 
     const result = await processChapter(chapter, {
@@ -377,7 +381,9 @@ function logStartupInfo(options: {
   }
 }
 
-main().catch((error) => {
-  console.error(`[error] ${error instanceof Error ? error.message : error}`);
-  process.exit(1);
-});
+if (import.meta.main) {
+  runProcessCourseCli().catch((error) => {
+    console.error(`[error] ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  });
+}
