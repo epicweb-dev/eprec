@@ -48,7 +48,7 @@ jobs:
       pull-requests: write
     if:
       ${{ github.repository == 'epicweb-dev/epic-recording' &&
-      contains('refs/heads/main,refs/heads/beta,refs/heads/next,refs/heads/alpha',
+      contains('refs/heads/main,refs/heads/beta,refs/heads/next,refs/heads/next-major,refs/heads/alpha',
       github.ref) && github.event_name == 'push' }}
     steps:
       - name: ⬇️ Checkout repo
