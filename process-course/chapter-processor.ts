@@ -892,8 +892,10 @@ async function handleCombinePrevious(params: {
   );
 
   // Step 9: Cleanup intermediate files
-  await safeUnlink(previousTrimmedPath);
-  await safeUnlink(currentTrimmedPath);
+  if (!options.keepIntermediates) {
+    await safeUnlink(previousTrimmedPath);
+    await safeUnlink(currentTrimmedPath);
+  }
 
   // Step 10: Verify no jarvis in final output
   let jarvisWarning: JarvisWarning | undefined;
