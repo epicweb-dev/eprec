@@ -1,4 +1,4 @@
-name: Auto Format
+name: Format Codebase
 
 on:
   workflow_run:
