@@ -1,9 +1,33 @@
 import { test, expect } from "bun:test";
 import {
   countTranscriptWords,
+  normalizeSkipPhrases,
   transcriptIncludesWord,
   normalizeWords,
 } from "./transcript";
+import { TRANSCRIPTION_PHRASES } from "../config";
+
+function createPhrases(...phrases: string[]): string[] {
+  return phrases;
+}
+
+// normalizeSkipPhrases tests
+test("normalizeSkipPhrases trims, lowercases, and filters empty", () => {
+  expect(normalizeSkipPhrases(createPhrases("  Hello ", " ", "World"))).toEqual(
+    ["hello", "world"],
+  );
+});
+
+test("normalizeSkipPhrases accepts a single phrase value", () => {
+  expect(normalizeSkipPhrases(" Jarvis Bad Take ")).toEqual([
+    "jarvis bad take",
+  ]);
+});
+
+test("normalizeSkipPhrases falls back to defaults when empty", () => {
+  expect(normalizeSkipPhrases("   ")).toEqual(TRANSCRIPTION_PHRASES);
+  expect(normalizeSkipPhrases([])).toEqual(TRANSCRIPTION_PHRASES);
+});
 
 // countTranscriptWords tests
 test("countTranscriptWords returns 0 for empty string", () => {

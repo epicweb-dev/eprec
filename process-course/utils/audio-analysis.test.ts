@@ -1,5 +1,13 @@
 import { test, expect } from "bun:test";
-import { computeRms, computeMinWindowRms } from "./audio-analysis";
+import {
+  buildSilenceGapsFromSpeech,
+  computeMinWindowRms,
+  computeRms,
+  findSilenceBoundaryFromGaps,
+  findSilenceBoundaryWithRms,
+  speechFallback,
+} from "./audio-analysis";
+import type { TimeRange } from "../types";
 
 // Factory function for creating audio samples
 function createSamples(...values: number[]): Float32Array {
@@ -8,6 +16,34 @@ function createSamples(...values: number[]): Float32Array {
 
 function createUniformSamples(value: number, length: number): Float32Array {
   return new Float32Array(length).fill(value);
+}
+
+function createRange(start: number, end: number): TimeRange {
+  return { start, end };
+}
+
+function createRanges(...pairs: [number, number][]): TimeRange[] {
+  return pairs.map(([start, end]) => createRange(start, end));
+}
+
+function createRmsOptions(
+  samples: number[],
+  direction: "before" | "after",
+  overrides: Partial<{
+    sampleRate: number;
+    rmsWindowMs: number;
+    rmsThreshold: number;
+    minSilenceMs: number;
+  }> = {},
+) {
+  return {
+    samples: createSamples(...samples),
+    sampleRate: overrides.sampleRate ?? 10,
+    direction,
+    rmsWindowMs: overrides.rmsWindowMs ?? 100,
+    rmsThreshold: overrides.rmsThreshold ?? 0.5,
+    minSilenceMs: overrides.minSilenceMs ?? 200,
+  };
 }
 
 // computeRms tests
@@ -111,4 +147,72 @@ test("computeMinWindowRms returns 0 for silence", () => {
 test("computeMinWindowRms handles mixed positive and negative", () => {
   const samples = createSamples(1, -1, 1, -1, 0.1, -0.1, 1, -1, 1, -1);
   expect(computeMinWindowRms(samples, 2)).toBeCloseTo(0.1);
+});
+
+// buildSilenceGapsFromSpeech tests
+test("buildSilenceGapsFromSpeech returns full gap for no speech", () => {
+  expect(buildSilenceGapsFromSpeech([], 10)).toEqual([createRange(0, 10)]);
+});
+
+test("buildSilenceGapsFromSpeech returns gaps between segments", () => {
+  const segments = createRanges([0, 1], [3, 4]);
+  expect(buildSilenceGapsFromSpeech(segments, 5)).toEqual(
+    createRanges([1, 3], [4, 5]),
+  );
+});
+
+test("buildSilenceGapsFromSpeech filters tiny gaps", () => {
+  const segments = createRanges([0, 1], [1.0005, 2]);
+  expect(buildSilenceGapsFromSpeech(segments, 2)).toEqual([]);
+});
+
+// findSilenceBoundaryFromGaps tests
+test("findSilenceBoundaryFromGaps returns target inside gap", () => {
+  const gaps = createRanges([0, 2], [4, 6]);
+  expect(findSilenceBoundaryFromGaps(gaps, 1.5, "before")).toBe(1.5);
+});
+
+test("findSilenceBoundaryFromGaps finds boundary before target", () => {
+  const gaps = createRanges([0, 1], [3, 4]);
+  expect(findSilenceBoundaryFromGaps(gaps, 2, "before")).toBe(1);
+});
+
+test("findSilenceBoundaryFromGaps finds boundary after target", () => {
+  const gaps = createRanges([0, 1], [3, 4]);
+  expect(findSilenceBoundaryFromGaps(gaps, 2, "after")).toBe(3);
+});
+
+test("findSilenceBoundaryFromGaps returns null when none found", () => {
+  const gaps = createRanges([1, 2]);
+  expect(findSilenceBoundaryFromGaps(gaps, 0.5, "before")).toBeNull();
+});
+
+// speechFallback tests
+test("speechFallback returns full duration range with note", () => {
+  expect(speechFallback(12.5, "fallback")).toEqual({
+    start: 0,
+    end: 12.5,
+    note: "fallback",
+  });
+});
+
+// findSilenceBoundaryWithRms tests
+test("findSilenceBoundaryWithRms returns null for empty samples", () => {
+  const options = createRmsOptions([], "after");
+  expect(findSilenceBoundaryWithRms(options)).toBeNull();
+});
+
+test("findSilenceBoundaryWithRms finds silence start for after direction", () => {
+  const options = createRmsOptions([1, 1, 0, 0, 1], "after");
+  expect(findSilenceBoundaryWithRms(options)).toBeCloseTo(0.2);
+});
+
+test("findSilenceBoundaryWithRms finds silence end for before direction", () => {
+  const options = createRmsOptions([1, 1, 1, 0, 0], "before");
+  expect(findSilenceBoundaryWithRms(options)).toBeCloseTo(0.5);
+});
+
+test("findSilenceBoundaryWithRms returns null when silence is too short", () => {
+  const options = createRmsOptions([1, 0, 1, 1], "after");
+  expect(findSilenceBoundaryWithRms(options)).toBeNull();
 });
