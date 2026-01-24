@@ -734,16 +734,19 @@ async function handleCombinePrevious(params: {
     previousOutputDuration,
   );
 
+  // Convert relative bounds to absolute times (detectSpeechBounds returns bounds relative to chapterStart)
+  const absoluteSpeechEnd = previousEndSearchStart + previousEndSpeechBounds.end;
+
   // Find silence boundary before the end of speech
   const previousTrimEnd = await findSilenceBoundary({
     inputPath: previousProcessedChapter.outputPath,
     duration: previousOutputDuration,
-    targetTime: previousEndSpeechBounds.end,
+    targetTime: absoluteSpeechEnd,
     direction: "before",
     maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
   });
 
-  const finalPreviousEnd = previousTrimEnd ?? previousEndSpeechBounds.end;
+  const finalPreviousEnd = previousTrimEnd ?? absoluteSpeechEnd;
 
   // Step 4: Trim start of current chapter at silence boundary
   const currentTrimStart = await findSilenceBoundary({
