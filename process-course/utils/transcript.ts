@@ -2,7 +2,6 @@ import type { TranscriptSegment } from "../../whispercpp-transcribe";
 import type { TimeRange } from "../types";
 import { TRANSCRIPTION_PHRASES } from "../config";
 import { buildTranscriptWords } from "../jarvis-commands/parser";
-import type { TranscriptWord } from "../jarvis-commands/types";
 
 /**
  * Normalize skip phrases from CLI input.
