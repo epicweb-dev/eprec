@@ -11,6 +11,7 @@ import { extractTranscriptionAudio } from "../process-course/ffmpeg";
 import { transcriptIncludesWord } from "../process-course/utils/transcript";
 import { transcribeAudio } from "../whispercpp-transcribe";
 import { runCommand } from "../utils";
+import { detectSpeechBounds } from "../speech-detection";
 
 const TEST_OUTPUT_DIR = path.join(process.cwd(), ".test-output", "e2e-test");
 const TEST_TRANSCRIPT_DIR = path.join(
@@ -458,37 +459,34 @@ test("e2e combine workflow creates edits directory for combined chapter", async 
 });
 
 test("e2e combined chapter has ≤300ms join silence", async () => {
-  const transcriptPath = path.join(
-    TEST_OUTPUT_DIR,
-    "edits",
-    "chapter-07-unnamed-6",
-    "transcript.json",
+  const prevTrimPath = path.join(
+    TMP_DIR,
+    "chapter-08-unnamed-7-previous-trimmed.mp4",
   );
-  const content = await readFile(transcriptPath);
-  const parsed = JSON.parse(content) as {
-    words: Array<{ word: string; start: number; end: number }>;
-  };
-  const words = parsed.words ?? [];
-  const lastTestIndex = [...words]
-    .map((word, index) => ({ word, index }))
-    .filter((entry) => entry.word.word === "test")
-    .map((entry) => entry.index)
-    .pop();
-  expect(lastTestIndex).toBeDefined();
-
-  const nextIndex = words.findIndex(
-    (word, index) =>
-      index > (lastTestIndex ?? -1) &&
-      (word.word === "this" || word.word === "content"),
+  const currTrimPath = path.join(
+    TMP_DIR,
+    "chapter-08-unnamed-7-current-trimmed.mp4",
   );
-  expect(nextIndex).toBeGreaterThan(-1);
+  expect(await fileExists(prevTrimPath)).toBe(true);
+  expect(await fileExists(currTrimPath)).toBe(true);
 
-  const prev = words[lastTestIndex ?? 0];
-  const next = words[nextIndex];
-  if (!prev || !next) {
-    throw new Error("Missing join boundary words for gap check.");
-  }
-  const gap = next.start - prev.end;
+  const prevDuration = await getMediaDurationSeconds(prevTrimPath);
+  const currDuration = await getMediaDurationSeconds(currTrimPath);
+  const prevBounds = await detectSpeechBounds(
+    prevTrimPath,
+    0,
+    prevDuration,
+    prevDuration,
+  );
+  const currBounds = await detectSpeechBounds(
+    currTrimPath,
+    0,
+    currDuration,
+    currDuration,
+  );
+  const trailingSilence = Math.max(0, prevDuration - prevBounds.end);
+  const leadingSilence = Math.max(0, currBounds.start);
+  const gap = trailingSilence + leadingSilence;
   expect(gap).toBeLessThanOrEqual(0.3);
 }, 30000);
 
