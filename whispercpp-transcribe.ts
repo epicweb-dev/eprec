@@ -113,9 +113,7 @@ async function readTranscriptText(transcriptPath: string, fallback: string) {
 	throw new Error('Whisper.cpp transcript output was empty.')
 }
 
-async function readTranscriptSegments(
-	transcriptPath: string,
-): Promise<{
+async function readTranscriptSegments(transcriptPath: string): Promise<{
 	segments: TranscriptSegment[]
 	source: TranscriptionResult['segmentsSource']
 }> {
