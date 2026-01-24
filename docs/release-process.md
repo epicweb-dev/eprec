@@ -9,11 +9,16 @@ Releases are handled by semantic-release in CI using Bun.
 
 ## CI behavior
 
-- Workflow: `.github/workflows/release.yml`
+- Workflow: `.github/workflows/validate.yml`
+- Runs `bun run validate` in the main job.
 - Installs dependencies with `bun install`.
-- Runs semantic-release with `npx` (Node-only tool).
+- Runs semantic-release via the GitHub Action (default config).
 - Publishes source files (no build step).
 - Uses npm trusted publishing with OIDC and provenance.
+- Release branches:
+  - `main`, `next`, `next-major`
+  - `beta` (prerelease), `alpha` (prerelease)
+  - maintenance: `+([0-9])?(.{+([0-9]),x}).x`
 
 ## Local dry run
 
