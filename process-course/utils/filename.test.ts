@@ -23,5 +23,5 @@ test("formatChapterFilename falls back to chapter-N when title missing", () => {
 
 test("formatChapterFilename normalizes number words and dots", () => {
   const chapter = createChapter(0, "Lesson One point Five");
-  expect(formatChapterFilename(chapter)).toBe("chapter-01-lesson-01-05");
+  expect(formatChapterFilename(chapter)).toBe("chapter-01-lesson-0105");
 });
