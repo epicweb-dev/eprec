@@ -793,10 +793,7 @@ async function handleCombinePrevious(params: {
 
   const rawPreviousEnd = previousTrimEnd ?? absoluteSpeechEnd;
   const safePreviousEnd = Math.max(rawPreviousEnd, absoluteSpeechEnd);
-  const maxTrimBackSeconds = CONFIG.commandSilenceMaxBackwardSeconds;
-  const minAllowedEnd = Math.max(0, previousOutputDuration - maxTrimBackSeconds);
-  const finalPreviousEnd =
-    safePreviousEnd < minAllowedEnd ? previousOutputDuration : safePreviousEnd;
+  const finalPreviousEnd = safePreviousEnd;
 
   // Step 4: Trim start of current chapter at silence boundary
   const currentTrimStart = await findSilenceBoundary({

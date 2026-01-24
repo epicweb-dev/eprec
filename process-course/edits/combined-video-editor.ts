@@ -5,7 +5,7 @@ import { detectSpeechBounds, checkSegmentHasSpeech } from "../../speech-detectio
 import { findSilenceBoundary } from "../jarvis-commands/windows";
 import { extractChapterSegmentAccurate, concatSegments } from "../ffmpeg";
 import { clamp, runCommand } from "../../utils";
-import { CONFIG, EDIT_CONFIG } from "../config";
+import { EDIT_CONFIG } from "../config";
 import { editVideo } from "./video-editor";
 
 export interface CombineVideosOptions {
@@ -201,12 +201,7 @@ async function findVideo1TrimEnd(options: {
   });
   const rawEnd = silenceBoundary ?? speechEnd;
   const safeEnd = Math.max(rawEnd, speechEnd);
-  const minAllowedEnd = Math.max(
-    0,
-    options.duration - CONFIG.commandSilenceMaxBackwardSeconds,
-  );
-  const finalEnd = safeEnd < minAllowedEnd ? options.duration : safeEnd;
-  return clamp(finalEnd + options.paddingSeconds, 0, options.duration);
+  return clamp(safeEnd + options.paddingSeconds, 0, options.duration);
 }
 
 async function findVideo2Trim(options: {

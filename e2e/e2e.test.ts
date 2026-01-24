@@ -575,9 +575,13 @@ test("e2e combine edit removes a unique word successfully", async () => {
   expect(
     transcriptIncludesWord(editedTranscript, removableWord ?? ""),
   ).toBe(false);
-  expectTranscriptIncludesWords(
+  expectTranscriptIncludesWordGroup(
     editedTranscript,
-    createExpectedWords("split", "test", "joins", "seven"),
+    createExpectedWordGroup("split", "test"),
+  );
+  expectTranscriptIncludesWordGroup(
+    editedTranscript,
+    createExpectedWordGroup("joins", "seven"),
   );
 }, 60000);
 
