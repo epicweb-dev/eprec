@@ -10,8 +10,9 @@ export function normalizeSkipPhrases(rawPhrases: unknown): string[] {
     .map((value) => value.trim())
     .filter(Boolean)
     .map((value) => value.toLowerCase());
+  const uniquePhrases = [...new Set(phrases)];
 
-  return phrases.length > 0 ? phrases : TRANSCRIPTION_PHRASES;
+  return uniquePhrases.length > 0 ? uniquePhrases : TRANSCRIPTION_PHRASES;
 }
 
 /**

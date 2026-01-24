@@ -24,6 +24,19 @@ test("normalizeSkipPhrases accepts a single phrase value", () => {
   ]);
 });
 
+test("normalizeSkipPhrases de-duplicates phrases while preserving order", () => {
+  expect(
+    normalizeSkipPhrases(
+      createPhrases(
+        "Jarvis Bad Take",
+        "jarvis bad take",
+        "bad take jarvis",
+        "BAD TAKE JARVIS",
+      ),
+    ),
+  ).toEqual(["jarvis bad take", "bad take jarvis"]);
+});
+
 test("normalizeSkipPhrases falls back to defaults when empty", () => {
   expect(normalizeSkipPhrases("   ")).toEqual(TRANSCRIPTION_PHRASES);
   expect(normalizeSkipPhrases([])).toEqual(TRANSCRIPTION_PHRASES);
