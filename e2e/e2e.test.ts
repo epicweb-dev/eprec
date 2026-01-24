@@ -9,6 +9,7 @@ import {
 } from "../process-course/paths";
 import { extractTranscriptionAudio } from "../process-course/ffmpeg";
 import { transcriptIncludesWord } from "../process-course/utils/transcript";
+import { buildTranscriptWords, scaleTranscriptSegments } from "../process-course/jarvis-commands/parser";
 import { transcribeAudio } from "../whispercpp-transcribe";
 import { runCommand } from "../utils";
 
@@ -97,6 +98,29 @@ async function transcribeOutputVideo(outputPath: string): Promise<string> {
   });
   const transcript = await transcribeAudio(audioPath, { outputBasePath });
   return transcript.text;
+}
+
+async function transcribeOutputVideoWords(outputPath: string) {
+  const transcriptDir = await ensureTranscriptDir();
+  const baseName = path.parse(outputPath).name;
+  const audioPath = path.join(transcriptDir, `${baseName}-output-words.wav`);
+  const outputBasePath = path.join(
+    transcriptDir,
+    `${baseName}-output-words-transcript`,
+  );
+  const duration = await getMediaDurationSeconds(outputPath);
+  await extractTranscriptionAudio({
+    inputPath: outputPath,
+    outputPath: audioPath,
+    start: 0,
+    end: duration,
+  });
+  const transcription = await transcribeAudio(audioPath, { outputBasePath });
+  const segments =
+    transcription.segmentsSource === "tokens"
+      ? transcription.segments
+      : scaleTranscriptSegments(transcription.segments, duration);
+  return buildTranscriptWords(segments);
 }
 
 function expectTranscriptIncludesWords(
@@ -297,6 +321,84 @@ test("e2e jarvis-edits.log contains chapter 4", async () => {
 });
 
 // =============================================================================
+// Edit Workflow Tests (Chapter 4)
+// =============================================================================
+
+test("e2e edit workflow creates edits directory for chapter 4", async () => {
+  const editsDir = path.join(TEST_OUTPUT_DIR, "edits", "chapter-04-unnamed-3");
+  const exists = await fileExists(editsDir);
+  expect(exists).toBe(true);
+});
+
+test("e2e edit workflow creates transcript.txt for chapter 4", async () => {
+  const transcriptPath = path.join(
+    TEST_OUTPUT_DIR,
+    "edits",
+    "chapter-04-unnamed-3",
+    "transcript.txt",
+  );
+  const exists = await fileExists(transcriptPath);
+  expect(exists).toBe(true);
+  const content = await readFile(transcriptPath);
+  expect(content.length).toBeGreaterThan(0);
+  expect(content.toLowerCase()).toContain("manual");
+});
+
+test("e2e edit workflow creates transcript.json for chapter 4", async () => {
+  const transcriptPath = path.join(
+    TEST_OUTPUT_DIR,
+    "edits",
+    "chapter-04-unnamed-3",
+    "transcript.json",
+  );
+  const exists = await fileExists(transcriptPath);
+  expect(exists).toBe(true);
+  const content = await readFile(transcriptPath);
+  const parsed = JSON.parse(content);
+  expect(parsed.version).toBe(1);
+  expect(parsed.source_video).toBeDefined();
+  expect(parsed.words).toBeInstanceOf(Array);
+  expect(parsed.words.length).toBeGreaterThan(0);
+  expect(parsed.words[0]).toHaveProperty("word");
+  expect(parsed.words[0]).toHaveProperty("start");
+  expect(parsed.words[0]).toHaveProperty("end");
+  expect(parsed.words[0]).toHaveProperty("index");
+});
+
+test("e2e edit workflow removes word 'manual' from chapter 4", async () => {
+  const editsDir = path.join(TEST_OUTPUT_DIR, "edits", "chapter-04-unnamed-3");
+  const transcriptTxtPath = path.join(editsDir, "transcript.txt");
+  const transcriptJsonPath = path.join(editsDir, "transcript.json");
+  const originalVideoPath = path.join(editsDir, "original.mp4");
+  const editedOutputPath = path.join(
+    TEST_OUTPUT_DIR,
+    "chapter-04-unnamed-3.edited.mp4",
+  );
+
+  const originalText = await readFile(transcriptTxtPath);
+  const editedText = originalText
+    .replace(/\bmanual\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tempEditedPath = path.join(editsDir, "transcript-edited-test.txt");
+  await Bun.write(tempEditedPath, editedText);
+
+  const result =
+    await $`bun process-course/edits/cli.ts edit-video --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`.quiet();
+  expect(result.exitCode).toBe(0);
+
+  const editedExists = await fileExists(editedOutputPath);
+  expect(editedExists).toBe(true);
+
+  const editedTranscript = await transcribeOutputVideo(editedOutputPath);
+  expect(transcriptIncludesWord(editedTranscript, "manual")).toBe(false);
+  expectTranscriptIncludesWords(
+    editedTranscript,
+    createExpectedWords("chapter", "flagged", "editing"),
+  );
+}, 60000);
+
+// =============================================================================
 // Chapter 5: Note Command
 // =============================================================================
 
@@ -358,6 +460,92 @@ test(
   },
   20000,
 );
+
+// =============================================================================
+// Combine Workflow Tests (Chapter 7+8)
+// =============================================================================
+
+test("e2e combine workflow creates edits directory for combined chapter", async () => {
+  const editsDir = path.join(TEST_OUTPUT_DIR, "edits", "chapter-07-unnamed-6");
+  const exists = await fileExists(editsDir);
+  expect(exists).toBe(true);
+});
+
+test("e2e combined chapter has ≤300ms silence between parts", async () => {
+  const chapter7Path = path.join(TEST_OUTPUT_DIR, "chapter-07-unnamed-6.mp4");
+  const words = await transcribeOutputVideoWords(chapter7Path);
+
+  let maxGap = 0;
+  for (let index = 1; index < words.length; index += 1) {
+    const prev = words[index - 1];
+    const next = words[index];
+    if (!prev || !next) {
+      continue;
+    }
+    const gap = next.start - prev.end;
+    if (gap > maxGap) {
+      maxGap = gap;
+    }
+  }
+  expect(maxGap).toBeLessThanOrEqual(0.3);
+}, 30000);
+
+test("e2e combine edit errors on word modification (chicken test)", async () => {
+  const editsDir = path.join(TEST_OUTPUT_DIR, "edits", "chapter-07-unnamed-6");
+  const transcriptTxtPath = path.join(editsDir, "transcript.txt");
+  const transcriptJsonPath = path.join(editsDir, "transcript.json");
+  const originalVideoPath = path.join(editsDir, "original.mp4");
+  const editedOutputPath = path.join(
+    TEST_OUTPUT_DIR,
+    "chapter-07-error-test.mp4",
+  );
+
+  const originalText = await readFile(transcriptTxtPath);
+  const editedText = originalText
+    .replace(/joins with chapter seven/gi, "chicken")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tempEditedPath = path.join(editsDir, "transcript-error-test.txt");
+  await Bun.write(tempEditedPath, editedText);
+
+  const result =
+    await $`bun process-course/edits/cli.ts edit-video --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`.quiet().nothrow();
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr.toString()).toContain("mismatch");
+}, 30000);
+
+test("e2e combine edit removes word 'chapter' successfully", async () => {
+  const editsDir = path.join(TEST_OUTPUT_DIR, "edits", "chapter-07-unnamed-6");
+  const transcriptTxtPath = path.join(editsDir, "transcript.txt");
+  const transcriptJsonPath = path.join(editsDir, "transcript.json");
+  const originalVideoPath = path.join(editsDir, "original.mp4");
+  const editedOutputPath = path.join(
+    TEST_OUTPUT_DIR,
+    "chapter-07-word-removed.mp4",
+  );
+
+  const originalText = await readFile(transcriptTxtPath);
+  const editedText = originalText
+    .replace(/\bchapter\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tempEditedPath = path.join(editsDir, "transcript-word-removed.txt");
+  await Bun.write(tempEditedPath, editedText);
+
+  const result =
+    await $`bun process-course/edits/cli.ts edit-video --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`.quiet();
+  expect(result.exitCode).toBe(0);
+
+  const editedExists = await fileExists(editedOutputPath);
+  expect(editedExists).toBe(true);
+
+  const editedTranscript = await transcribeOutputVideo(editedOutputPath);
+  expect(transcriptIncludesWord(editedTranscript, "chapter")).toBe(false);
+  expectTranscriptIncludesWords(
+    editedTranscript,
+    createExpectedWords("split", "test", "joins", "seven"),
+  );
+}, 60000);
 
 // =============================================================================
 // Chapter 9: Too Short
