@@ -5,6 +5,7 @@ import { ensureFfmpegAvailable, getChapters } from "./process-course/ffmpeg";
 import { logInfo } from "./process-course/logging";
 import { parseCliArgs } from "./process-course/cli";
 import { resolveChapterSelection } from "./process-course/utils/chapter-selection";
+import { removeDirIfEmpty } from "./process-course/utils/file-utils";
 import { writeJarvisLogs, writeSummaryLogs } from "./process-course/summary";
 import {
   processChapter,
@@ -315,6 +316,10 @@ async function processInputFile(options: {
       jarvisEdits,
       dryRun,
     });
+  }
+
+  if (!dryRun) {
+    await removeDirIfEmpty(tmpDir);
   }
 }
 
