@@ -1,6 +1,3 @@
-import path from "node:path";
-import yargs from "yargs/yargs";
-import { hideBin } from "yargs/helpers";
 import type { Argv, Arguments } from "yargs";
 import { getDefaultWhisperModelPath } from "../whispercpp-transcribe";
 import {
@@ -24,17 +21,18 @@ export interface CliArgs {
   whisperBinaryPath: string | undefined;
   whisperSkipPhrases: string[];
   chapterSelection: ChapterSelection | null;
-  shouldExit: boolean;
 }
 
-export function parseCliArgs(): CliArgs {
-  const rawArgs = hideBin(process.argv);
+export const PROCESS_USAGE =
+  "Usage: $0 process <input.mp4|input.mkv> [input2.mp4 ...] [output-dir] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]\n  If the last positional argument doesn't have a video extension, it's treated as the output directory.";
+
+export function registerProcessCommand(
+  yargsInstance: Argv,
+  runProcess: (args: CliArgs) => Promise<void>,
+): Argv {
   const defaultWhisperModelPath = getDefaultWhisperModelPath();
-  const parser = yargs(rawArgs)
-    .scriptName("eprec")
-    .usage(
-      "Usage: $0 process <input.mp4|input.mkv> [input2.mp4 ...] [output-dir] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]\n  If the last positional argument doesn't have a video extension, it's treated as the output directory.",
-    )
+
+  return yargsInstance
     .command(
       "process <input...>",
       "Process chapters into separate files",
@@ -48,7 +46,8 @@ export function parseCliArgs(): CliArgs {
           .option("output-dir", {
             type: "string",
             alias: "o",
-            describe: "Output directory (optional - if not specified, creates directory next to each input file)",
+            describe:
+              "Output directory (optional - if not specified, creates directory next to each input file)",
           })
           .option("min-chapter-seconds", {
             type: "number",
@@ -107,8 +106,11 @@ export function parseCliArgs(): CliArgs {
             describe:
               "Only process selected chapters (e.g. 4, 4-6, 4,6,9-12, 4-*)",
           }),
+      async (args: Arguments) => {
+        const parsedArgs = parseProcessArgs(args, defaultWhisperModelPath);
+        await runProcess(parsedArgs);
+      },
     )
-    .demandCommand(1, "A command is required.")
     .check((args: Arguments) => {
       const minChapterSeconds = args["min-chapter-seconds"];
       if (minChapterSeconds !== undefined) {
@@ -121,45 +123,25 @@ export function parseCliArgs(): CliArgs {
         }
       }
       return true;
-    })
-    .strict()
-    .help();
-
-  if (rawArgs.length === 0) {
-    parser.showHelp((message) => {
-      console.log(message);
     });
-    return {
-      inputPaths: [],
-      outputDir: null,
-      minChapterDurationSeconds: DEFAULT_MIN_CHAPTER_SECONDS,
-      dryRun: false,
-      keepIntermediates: false,
-      writeLogs: false,
-      enableTranscription: true,
-      whisperModelPath: defaultWhisperModelPath,
-      whisperLanguage: "en",
-      whisperBinaryPath: undefined,
-      whisperSkipPhrases: TRANSCRIPTION_PHRASES,
-      chapterSelection: null,
-      shouldExit: true,
-    };
-  }
+}
 
-  const argv = parser.parseSync();
-
-  let inputPaths = Array.isArray(argv.input)
-    ? argv.input.filter((p): p is string => typeof p === "string")
-    : typeof argv.input === "string"
-      ? [argv.input]
+function parseProcessArgs(
+  args: Arguments,
+  defaultWhisperModelPath: string,
+): CliArgs {
+  let inputPaths = Array.isArray(args.input)
+    ? args.input.filter((p): p is string => typeof p === "string")
+    : typeof args.input === "string"
+      ? [args.input]
       : [];
 
   // If output-dir is not explicitly set, check if the last positional arg
   // doesn't look like a video file (no video extension). If so, treat it as the output directory
   let outputDir =
-    typeof argv["output-dir"] === "string" &&
-    argv["output-dir"].trim().length > 0
-      ? argv["output-dir"]
+    typeof args["output-dir"] === "string" &&
+    args["output-dir"].trim().length > 0
+      ? args["output-dir"]
       : null;
 
   if (!outputDir && inputPaths.length > 0) {
@@ -190,7 +172,7 @@ export function parseCliArgs(): CliArgs {
     throw new Error("At least one input file is required.");
   }
 
-  const minChapterDurationSeconds = Number(argv["min-chapter-seconds"]);
+  const minChapterDurationSeconds = Number(args["min-chapter-seconds"]);
   if (
     !Number.isFinite(minChapterDurationSeconds) ||
     minChapterDurationSeconds < 0
@@ -202,28 +184,27 @@ export function parseCliArgs(): CliArgs {
     inputPaths,
     outputDir,
     minChapterDurationSeconds,
-    dryRun: Boolean(argv["dry-run"]),
-    keepIntermediates: Boolean(argv["keep-intermediates"]),
-    writeLogs: Boolean(argv["write-logs"]),
-    enableTranscription: Boolean(argv["enable-transcription"]),
+    dryRun: Boolean(args["dry-run"]),
+    keepIntermediates: Boolean(args["keep-intermediates"]),
+    writeLogs: Boolean(args["write-logs"]),
+    enableTranscription: Boolean(args["enable-transcription"]),
     whisperModelPath:
-      typeof argv["whisper-model-path"] === "string" &&
-      argv["whisper-model-path"].trim().length > 0
-        ? argv["whisper-model-path"]
+      typeof args["whisper-model-path"] === "string" &&
+      args["whisper-model-path"].trim().length > 0
+        ? args["whisper-model-path"]
         : defaultWhisperModelPath,
     whisperLanguage:
-      typeof argv["whisper-language"] === "string" &&
-      argv["whisper-language"].trim().length > 0
-        ? argv["whisper-language"].trim()
+      typeof args["whisper-language"] === "string" &&
+      args["whisper-language"].trim().length > 0
+        ? args["whisper-language"].trim()
         : "en",
     whisperBinaryPath:
-      typeof argv["whisper-binary-path"] === "string" &&
-      argv["whisper-binary-path"].trim().length > 0
-        ? argv["whisper-binary-path"].trim()
+      typeof args["whisper-binary-path"] === "string" &&
+      args["whisper-binary-path"].trim().length > 0
+        ? args["whisper-binary-path"].trim()
         : undefined,
-    whisperSkipPhrases: normalizeSkipPhrases(argv["whisper-skip-phrase"]),
+    whisperSkipPhrases: normalizeSkipPhrases(args["whisper-skip-phrase"]),
     chapterSelection:
-      argv.chapter === undefined ? null : parseChapterSelection(argv.chapter),
-    shouldExit: false,
+      args.chapter === undefined ? null : parseChapterSelection(args.chapter),
   } as CliArgs;
 }

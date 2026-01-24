@@ -3,7 +3,8 @@ import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { ensureFfmpegAvailable, getChapters } from "./process-course/ffmpeg";
 import { logInfo } from "./process-course/logging";
-import { parseCliArgs } from "./process-course/cli";
+import type { CliArgs } from "./process-course/cli";
+import { PROCESS_USAGE, registerProcessCommand } from "./process-course/cli";
 import { resolveChapterSelection } from "./process-course/utils/chapter-selection";
 import { removeDirIfEmpty } from "./process-course/utils/file-utils";
 import { writeJarvisLogs, writeSummaryLogs } from "./process-course/summary";
@@ -26,12 +27,7 @@ interface ProcessingSummary {
   jarvisWarnings: number;
 }
 
-async function main() {
-  const parsedArgs = parseCliArgs();
-  if (parsedArgs.shouldExit) {
-    return;
-  }
-
+export async function runProcessCommand(parsedArgs: CliArgs) {
   const {
     inputPaths,
     outputDir,
@@ -361,7 +357,24 @@ function logStartupInfo(options: {
   }
 }
 
-main().catch((error) => {
-  console.error(`[error] ${error instanceof Error ? error.message : error}`);
-  process.exit(1);
-});
+if (import.meta.main) {
+  const { default: yargs } = await import("yargs/yargs");
+  const { hideBin } = await import("yargs/helpers");
+
+  const parser = registerProcessCommand(
+    yargs(hideBin(process.argv)),
+    runProcessCommand,
+  )
+    .scriptName("process-course-video")
+    .usage(PROCESS_USAGE)
+    .demandCommand(1, "A command is required.")
+    .strict()
+    .help();
+
+  try {
+    await parser.parseAsync();
+  } catch (error) {
+    console.error(`[error] ${error instanceof Error ? error.message : error}`);
+    process.exit(1);
+  }
+}
