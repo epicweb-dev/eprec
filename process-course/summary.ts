@@ -1,7 +1,7 @@
 import path from "node:path";
-import { buildSummaryLogPath, buildJarvisWarningLogPath, buildJarvisEditLogPath } from "./paths";
+import { buildSummaryLogPath, buildJarvisWarningLogPath, buildJarvisEditLogPath, buildJarvisNoteLogPath } from "./paths";
 import { logInfo } from "./logging";
-import type { Chapter, JarvisWarning, JarvisEdit } from "./types";
+import type { Chapter, JarvisWarning, JarvisEdit, JarvisNote } from "./types";
 
 export type ProcessingSummary = {
   totalSelected: number;
@@ -19,9 +19,10 @@ export async function writeJarvisLogs(options: {
   inputPath: string;
   jarvisWarnings: JarvisWarning[];
   jarvisEdits: JarvisEdit[];
+  jarvisNotes: JarvisNote[];
   dryRun: boolean;
 }) {
-  const { outputDir, inputPath, jarvisWarnings, jarvisEdits, dryRun } = options;
+  const { outputDir, inputPath, jarvisWarnings, jarvisEdits, jarvisNotes, dryRun } = options;
 
   const jarvisWarningLogPath = buildJarvisWarningLogPath(outputDir);
   if (dryRun) {
@@ -69,6 +70,31 @@ export async function writeJarvisLogs(options: {
       editLines.push("Files needing edits: none");
     }
     await Bun.write(jarvisEditLogPath, `${editLines.join("\n")}\n`);
+  }
+
+  const jarvisNoteLogPath = buildJarvisNoteLogPath(outputDir);
+  if (dryRun) {
+    logInfo(`[dry-run] Would write jarvis note log: ${jarvisNoteLogPath}`);
+  } else {
+    const noteLines = [
+      `Input: ${inputPath}`,
+      `Output dir: ${outputDir}`,
+      `Note commands: ${jarvisNotes.length}`,
+    ];
+    if (jarvisNotes.length > 0) {
+      noteLines.push("Notes:");
+      jarvisNotes.forEach((note) => {
+        noteLines.push(
+          `- Chapter ${note.chapter.index + 1}: ${note.chapter.title} -> ${path.basename(
+            note.outputPath,
+          )}`,
+        );
+        noteLines.push(`  Note: ${note.note}`);
+      });
+    } else {
+      noteLines.push("Notes: none");
+    }
+    await Bun.write(jarvisNoteLogPath, `${noteLines.join("\n")}\n`);
   }
 }
 

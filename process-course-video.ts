@@ -10,8 +10,9 @@ import {
   processChapter,
   type ChapterProcessingOptions,
 } from "./process-course/chapter-processor";
-import type { JarvisEdit, JarvisWarning, ProcessedChapterInfo } from "./process-course/types";
+import type { JarvisEdit, JarvisNote, JarvisWarning, ProcessedChapterInfo } from "./process-course/types";
 import { formatSeconds } from "./utils";
+import { checkSegmentHasSpeech } from "./speech-detection";
 
 interface ProcessingSummary {
   totalSelected: number;
@@ -166,6 +167,7 @@ async function processInputFile(options: {
   const summaryDetails: string[] = [];
   const jarvisWarnings: JarvisWarning[] = [];
   const jarvisEdits: JarvisEdit[] = [];
+  const jarvisNotes: JarvisNote[] = [];
 
   const processingOptions: ChapterProcessingOptions = {
     inputPath,
@@ -181,12 +183,31 @@ async function processInputFile(options: {
     dryRun,
   };
 
+  // Track processed chapters that have speech (for combine logic)
+  const processedChaptersWithSpeech: ProcessedChapterInfo[] = [];
   let previousProcessedChapter: ProcessedChapterInfo | null = null;
 
   for (const chapter of selectedChapters) {
+    // Determine which chapter to combine with
+    // Always use the most recent processed chapter with speech (if any)
+    let chapterToCombineWith: ProcessedChapterInfo | null = null;
+    if (processedChaptersWithSpeech.length > 0) {
+      chapterToCombineWith =
+        processedChaptersWithSpeech[processedChaptersWithSpeech.length - 1];
+      // If previousProcessedChapter exists but is different, log that we're skipping it
+      if (
+        previousProcessedChapter &&
+        previousProcessedChapter !== chapterToCombineWith
+      ) {
+        logInfo(
+          `Previous chapter ${previousProcessedChapter.chapter.index + 1} has no speech. Using chapter ${chapterToCombineWith.chapter.index + 1} for combine instead.`,
+        );
+      }
+    }
+
     const result = await processChapter(chapter, {
       ...processingOptions,
-      previousProcessedChapter,
+      previousProcessedChapter: chapterToCombineWith,
     });
 
     // Update summary based on result
@@ -239,11 +260,37 @@ async function processInputFile(options: {
       jarvisEdits.push(result.jarvisEdit);
     }
 
+    if (result.jarvisNotes) {
+      jarvisNotes.push(...result.jarvisNotes);
+    }
+
     // Update previous processed chapter for combine logic
     if (result.status === "processed" && result.processedInfo) {
       previousProcessedChapter = result.processedInfo;
+      
+      // If we combined with a chapter, the combined output replaces that chapter in the list
+      if (chapterToCombineWith) {
+        const combineIndex = processedChaptersWithSpeech.findIndex(
+          (ch) => ch === chapterToCombineWith,
+        );
+        if (combineIndex >= 0) {
+          // Replace the combined chapter with the new combined output
+          processedChaptersWithSpeech[combineIndex] = result.processedInfo;
+        } else {
+          // Shouldn't happen, but if it does, add the combined result
+          processedChaptersWithSpeech.push(result.processedInfo);
+        }
+      } else {
+        // Not a combine - check if this chapter has speech and add to list if it does
+        const hasSpeech = await checkSegmentHasSpeech(
+          result.processedInfo.outputPath,
+          result.processedInfo.processedDuration,
+        );
+        if (hasSpeech) {
+          processedChaptersWithSpeech.push(result.processedInfo);
+        }
+      }
     }
-    // If combined, previousProcessedChapter stays the same (points to combined output)
   }
 
   // Always write jarvis logs (summary information)
@@ -252,6 +299,7 @@ async function processInputFile(options: {
     inputPath,
     jarvisWarnings,
     jarvisEdits,
+    jarvisNotes,
     dryRun,
   });
 

@@ -33,7 +33,7 @@ export function parseCliArgs(): CliArgs {
   const parser = yargs(rawArgs)
     .scriptName("process-course-video")
     .usage(
-      "Usage: $0 <input.mp4|input.mkv> [input2.mp4 ...] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]",
+      "Usage: $0 <input.mp4|input.mkv> [input2.mp4 ...] [output-dir] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]\n  If the last positional argument doesn't have a video extension, it's treated as the output directory.",
     )
     .command(
       "$0 <input...>",
@@ -147,20 +147,37 @@ export function parseCliArgs(): CliArgs {
 
   const argv = parser.parseSync();
 
-  const inputPaths = Array.isArray(argv.input)
+  let inputPaths = Array.isArray(argv.input)
     ? argv.input.filter((p): p is string => typeof p === "string")
     : typeof argv.input === "string"
       ? [argv.input]
       : [];
-  if (inputPaths.length === 0) {
-    throw new Error("At least one input file is required.");
-  }
 
-  const outputDir =
+  // If output-dir is not explicitly set, check if the last positional arg
+  // doesn't look like a video file (no video extension). If so, treat it as the output directory
+  let outputDir =
     typeof argv["output-dir"] === "string" &&
     argv["output-dir"].trim().length > 0
       ? argv["output-dir"]
       : null;
+
+  if (!outputDir && inputPaths.length > 0) {
+    const lastArg = inputPaths[inputPaths.length - 1];
+    const videoExtensions = [".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".m4v"];
+    const hasVideoExtension = videoExtensions.some((ext) =>
+      lastArg.toLowerCase().endsWith(ext),
+    );
+    
+    if (!hasVideoExtension) {
+      // Last argument is likely the output directory
+      outputDir = lastArg;
+      inputPaths = inputPaths.slice(0, -1); // Remove the last argument from inputs
+    }
+  }
+
+  if (inputPaths.length === 0) {
+    throw new Error("At least one input file is required.");
+  }
 
   const minChapterDurationSeconds = Number(argv["min-chapter-seconds"]);
   if (

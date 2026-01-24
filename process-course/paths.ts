@@ -40,6 +40,10 @@ export function buildJarvisEditLogPath(outputDir: string) {
   return path.join(outputDir, "jarvis-edits.log");
 }
 
+export function buildJarvisNoteLogPath(outputDir: string) {
+  return path.join(outputDir, "jarvis-notes.log");
+}
+
 export function buildChapterLogPath(tmpDir: string, outputPath: string) {
   const parsed = path.parse(outputPath);
   return path.join(tmpDir, `${parsed.name}.log`);

@@ -2,6 +2,11 @@
   "name": "epic-recording",
   "type": "module",
   "private": true,
+  "scripts": {
+    "test": "bun test process-course utils.test.ts",
+    "test:e2e": "bun test e2e",
+    "test:all": "bun test"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/yargs": "^17.0.35"

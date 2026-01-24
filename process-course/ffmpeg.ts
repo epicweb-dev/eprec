@@ -4,7 +4,7 @@ import {
   formatSeconds,
 } from "../utils";
 import { CONFIG, TRANSCRIPTION_SAMPLE_RATE } from "./config";
-import { logCommand, logInfo } from "./logging";
+import { logCommand, logInfo, logWarn } from "./logging";
 import type { Chapter, LoudnormAnalysis } from "./types";
 
 async function runCommand(command: string[], allowFailure = false) {
@@ -101,6 +101,20 @@ export async function readAudioSamples(options: {
   return new Float32Array(buffer);
 }
 
+function isValidLoudnessValue(value: string, min?: number, max?: number): boolean {
+  const num = Number.parseFloat(value);
+  if (!Number.isFinite(num)) {
+    return false;
+  }
+  if (min !== undefined && num < min) {
+    return false;
+  }
+  if (max !== undefined && num > max) {
+    return false;
+  }
+  return true;
+}
+
 function buildNormalizeAudioFilter(options: {
   printFormat: "json" | "summary";
   analysis: LoudnormAnalysis | null;
@@ -115,15 +129,30 @@ function buildNormalizeAudioFilter(options: {
     `TP=${CONFIG.loudnessTargetTp}`,
   ];
 
+  // Only use analysis if all values are valid (not -inf/inf)
+  // input_i must be in range [-99, 0] per ffmpeg loudnorm filter
   if (options.analysis) {
-    loudnorm.push(
-      `measured_I=${options.analysis.input_i}`,
-      `measured_TP=${options.analysis.input_tp}`,
-      `measured_LRA=${options.analysis.input_lra}`,
-      `measured_thresh=${options.analysis.input_thresh}`,
-      `offset=${options.analysis.target_offset}`,
-      "linear=true",
-    );
+    const hasValidAnalysis =
+      isValidLoudnessValue(options.analysis.input_i, -99, 0) &&
+      isValidLoudnessValue(options.analysis.input_tp) &&
+      isValidLoudnessValue(options.analysis.input_lra) &&
+      isValidLoudnessValue(options.analysis.input_thresh) &&
+      isValidLoudnessValue(options.analysis.target_offset);
+
+    if (hasValidAnalysis) {
+      loudnorm.push(
+        `measured_I=${options.analysis.input_i}`,
+        `measured_TP=${options.analysis.input_tp}`,
+        `measured_LRA=${options.analysis.input_lra}`,
+        `measured_thresh=${options.analysis.input_thresh}`,
+        `offset=${options.analysis.target_offset}`,
+        "linear=true",
+      );
+    } else {
+      logWarn(
+        `Audio analysis contains invalid values (input_i=${options.analysis.input_i}), skipping measured normalization. Using default loudnorm settings.`,
+      );
+    }
   }
 
   loudnorm.push(`print_format=${options.printFormat}`);

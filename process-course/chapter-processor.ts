@@ -31,7 +31,7 @@ import {
   analyzeCommands,
   formatCommandTypes,
 } from "./jarvis-commands";
-import type { Chapter, TimeRange, JarvisWarning, JarvisEdit, ProcessedChapterInfo } from "./types";
+import type { Chapter, TimeRange, JarvisWarning, JarvisEdit, JarvisNote, ProcessedChapterInfo } from "./types";
 
 export interface ChapterProcessingOptions {
   inputPath: string;
@@ -58,6 +58,7 @@ export interface ChapterProcessingResult {
     | "dry-run";
   jarvisWarning?: JarvisWarning;
   jarvisEdit?: JarvisEdit;
+  jarvisNotes?: JarvisNote[];
   fallbackNote?: string;
   logWritten: boolean;
   processedInfo?: ProcessedChapterInfo;
@@ -146,6 +147,7 @@ export async function processChapter(
     let commandWindows: TimeRange[] = [];
     let commandFilenameOverride: string | null = null;
     let hasEditCommand = false;
+    let commandNotes: Array<{ value: string; window: TimeRange }> = [];
 
     if (options.enableTranscription) {
       const transcriptionResult = await transcribeAndAnalyze({
@@ -178,6 +180,7 @@ export async function processChapter(
       commandWindows = transcriptionResult.commandWindows;
       commandFilenameOverride = transcriptionResult.filenameOverride;
       hasEditCommand = transcriptionResult.hasEdit;
+      commandNotes = transcriptionResult.notes;
 
       // Handle combine-previous command
       if (transcriptionResult.hasCombinePrevious) {
@@ -186,7 +189,7 @@ export async function processChapter(
             `Combine previous command detected for chapter ${chapter.index + 1}, but no previous chapter available. Processing normally.`,
           );
         } else {
-          return await handleCombinePrevious({
+          const combineResult = await handleCombinePrevious({
             chapter,
             previousProcessedChapter: options.previousProcessedChapter,
             commandWindows,
@@ -197,6 +200,11 @@ export async function processChapter(
             paths,
             options,
           });
+          // If combine failed (returned null), continue with normal processing
+          if (combineResult !== null) {
+            return combineResult;
+          }
+          // Otherwise, fall through to normal processing
         }
       }
     }
@@ -325,6 +333,19 @@ export async function processChapter(
       );
     }
 
+    // Step 12: Track note commands
+    const jarvisNotes: JarvisNote[] = commandNotes.map((note) => ({
+      chapter,
+      outputPath: finalOutputPath,
+      note: note.value,
+      timestamp: note.window.start,
+    }));
+    if (jarvisNotes.length > 0) {
+      logInfo(
+        `Note command${jarvisNotes.length > 1 ? "s" : ""} detected for chapter ${chapter.index + 1}: ${jarvisNotes.map((n) => n.note).join(", ")}`,
+      );
+    }
+
     const processedInfo: ProcessedChapterInfo = {
       chapter,
       outputPath: finalOutputPath,
@@ -336,6 +357,7 @@ export async function processChapter(
       status: "processed",
       jarvisWarning,
       jarvisEdit,
+      jarvisNotes: jarvisNotes.length > 0 ? jarvisNotes : undefined,
       fallbackNote,
       logWritten,
       processedInfo,
@@ -423,6 +445,7 @@ interface TranscriptionAnalysisResult {
   hasEdit: boolean;
   hasBadTake: boolean;
   hasCombinePrevious: boolean;
+  notes: Array<{ value: string; window: TimeRange }>;
   shouldSkip: boolean;
   skipReason?: string;
 }
@@ -480,6 +503,7 @@ async function transcribeAndAnalyze(params: {
       hasEdit: analysis.hasEdit,
       hasBadTake: analysis.hasBadTake,
       hasCombinePrevious: analysis.hasCombinePrevious,
+      notes: analysis.notes,
       shouldSkip: true,
       skipReason: analysis.skipReason,
     };
@@ -506,6 +530,7 @@ async function transcribeAndAnalyze(params: {
     hasEdit: analysis.hasEdit,
     hasBadTake: analysis.hasBadTake,
     hasCombinePrevious: analysis.hasCombinePrevious,
+    notes: analysis.notes,
     shouldSkip: false,
   };
 }
@@ -640,7 +665,7 @@ async function handleCombinePrevious(params: {
   outputBasePath: string;
   paths: IntermediatePaths;
   options: ChapterProcessingOptions;
-}): Promise<ChapterProcessingResult> {
+}): Promise<ChapterProcessingResult | null> {
   const {
     chapter,
     previousProcessedChapter,
@@ -652,6 +677,20 @@ async function handleCombinePrevious(params: {
     paths,
     options,
   } = params;
+
+  // Check if previous chapter has speech before attempting to combine
+  // If it doesn't, return null to signal caller should try with an earlier chapter
+  const previousHasSpeech = await checkSegmentHasSpeech(
+    previousProcessedChapter.outputPath,
+    previousProcessedChapter.processedDuration,
+  );
+
+  if (!previousHasSpeech) {
+    logInfo(
+      `Previous chapter ${previousProcessedChapter.chapter.index + 1} has no speech. Cannot combine with chapter ${chapter.index + 1}.`,
+    );
+    return null;
+  }
 
   logInfo(
     `Combining chapter ${chapter.index + 1} with previous chapter ${previousProcessedChapter.chapter.index + 1}`,
@@ -766,21 +805,18 @@ async function handleCombinePrevious(params: {
     end: currentPaddedEnd,
   });
 
-  // Step 6: Check if segments have speech
+  // Step 6: Check if current segment has speech
+  // Note: We already verified previous chapter has speech at the start of this function
   const previousDuration = previousPaddedEnd;
   const currentDuration = currentPaddedEnd - currentPaddedStart;
-  const previousHasSpeech = await checkSegmentHasSpeech(
-    previousTrimmedPath,
-    previousDuration,
-  );
   const currentHasSpeech = await checkSegmentHasSpeech(
     currentTrimmedPath,
     currentDuration,
   );
 
-  if (!previousHasSpeech || !currentHasSpeech) {
+  if (!currentHasSpeech) {
     throw new Error(
-      `Cannot combine: ${!previousHasSpeech ? "previous" : "current"} segment has no speech.`,
+      `Cannot combine: current segment has no speech.`,
     );
   }
 

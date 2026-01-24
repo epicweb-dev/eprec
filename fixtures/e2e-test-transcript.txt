@@ -1,0 +1,12 @@
+ chapter 1 normal processing hello this is a normal chapter that should be
+ processed without any commands chapter 2 bad take this chapter has a mistake
+ Jarvis bad take thanks chapter 3 file name override Jarvis file name custom
+ output thanks this chapter test the file name command chapter 4 edit flag
+ Jarvis edit thanks this chapter will be flagged for manual editing chapter 5
+ note command Jarvis note remember to add graphics here thanks this tests the note
+ feature chapter 6 never mind cancellation let me say something
+ Jarvis never mind thanks that command should be removed from our but this
+ speech kept chapters chapter 7 split base this is part of a split test chapter
+ 8 combine previous Jarvis combine previous thanks this content joins with
+ chapter 7 chapter 9 too short hi chapter 10 new chapter alias Jarvis new chapter
+ thanks testing the split alias command

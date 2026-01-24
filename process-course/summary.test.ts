@@ -39,6 +39,7 @@ test("writeJarvisLogs writes warning and edit logs", async () => {
       inputPath: "/videos/course.mp4",
       jarvisWarnings: [warning],
       jarvisEdits: [edit],
+      jarvisNotes: [],
       dryRun: false,
     });
 
@@ -72,6 +73,7 @@ test("writeJarvisLogs handles empty warning and edit lists", async () => {
       inputPath: "/videos/course.mp4",
       jarvisWarnings: [],
       jarvisEdits: [],
+      jarvisNotes: [],
       dryRun: false,
     });
 
