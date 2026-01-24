@@ -1,4 +1,4 @@
-import { readdir, rm, unlink } from "node:fs/promises";
+import { readdir, rmdir, unlink } from "node:fs/promises";
 import { logInfo } from "../logging";
 
 /**
@@ -41,7 +41,7 @@ export async function removeDirIfEmpty(dirPath: string): Promise<boolean> {
   }
 
   try {
-    await rm(dirPath);
+    await rmdir(dirPath);
     return true;
   } catch (error) {
     if (error && typeof error === "object" && "code" in error) {
