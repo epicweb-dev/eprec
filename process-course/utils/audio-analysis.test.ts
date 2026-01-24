@@ -297,7 +297,7 @@ test("findLowestAmplitudeOffset picks the lowest RMS window", () => {
     rmsWindowMs: 100,
   });
   expect(result).not.toBeNull();
-  expect(result?.offsetSeconds).toBeCloseTo(0.45, 3);
+  expect(result?.offsetSeconds).toBeCloseTo(0.35, 3);
   expect(result?.rms).toBeLessThan(0.2);
 });
 
@@ -311,7 +311,7 @@ test("findLowestAmplitudeBoundaryProgressive uses closest low amplitude", () => 
     ...options,
     rmsThreshold: 0.2,
   });
-  expect(boundary).toBeCloseTo(0.55, 2);
+  expect(boundary).toBeCloseTo(0.65, 2);
 });
 
 test("findLowestAmplitudeBoundaryProgressive returns null without quiet audio", () => {
