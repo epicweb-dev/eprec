@@ -303,6 +303,109 @@ export function findSilenceBoundaryProgressive(options: {
   return null;
 }
 
+export function findLowestAmplitudeOffset(options: {
+  samples: Float32Array;
+  sampleRate: number;
+  rmsWindowMs: number;
+}): { offsetSeconds: number; rms: number } | null {
+  const windowSamples = Math.max(
+    1,
+    Math.round((options.sampleRate * options.rmsWindowMs) / 1000),
+  );
+  if (options.samples.length === 0 || windowSamples <= 0) {
+    return null;
+  }
+  if (options.samples.length <= windowSamples) {
+    return {
+      offsetSeconds: (options.samples.length / 2) / options.sampleRate,
+      rms: computeRms(options.samples),
+    };
+  }
+  let minRms = Number.POSITIVE_INFINITY;
+  let minOffset = 0;
+  for (
+    let offset = 0;
+    offset + windowSamples <= options.samples.length;
+    offset += windowSamples
+  ) {
+    let sumSquares = 0;
+    for (let index = 0; index < windowSamples; index += 1) {
+      const sample = options.samples[offset + index] ?? 0;
+      sumSquares += sample * sample;
+    }
+    const rms = Math.sqrt(sumSquares / windowSamples);
+    if (rms < minRms) {
+      minRms = rms;
+      minOffset = offset;
+    }
+  }
+  if (!Number.isFinite(minRms)) {
+    return null;
+  }
+  const offsetSeconds =
+    (minOffset + windowSamples / 2) / options.sampleRate;
+  return { offsetSeconds, rms: minRms };
+}
+
+export function findLowestAmplitudeBoundaryProgressive(options: {
+  samples: Float32Array;
+  sampleRate: number;
+  direction: SilenceBoundaryDirection;
+  startWindowSeconds: number;
+  stepSeconds: number;
+  maxWindowSeconds: number;
+  rmsWindowMs: number;
+  rmsThreshold: number;
+}): number | null {
+  if (options.samples.length === 0 || options.sampleRate <= 0) {
+    return null;
+  }
+  const totalSeconds = options.samples.length / options.sampleRate;
+  const maxWindowSeconds = Math.min(options.maxWindowSeconds, totalSeconds);
+  if (maxWindowSeconds <= 0.01) {
+    return null;
+  }
+  const startWindowSeconds = Math.min(
+    Math.max(options.startWindowSeconds, 0.01),
+    maxWindowSeconds,
+  );
+  const stepSeconds = Math.max(options.stepSeconds, 0.01);
+  const totalSamples = options.samples.length;
+
+  for (
+    let windowSeconds = startWindowSeconds;
+    windowSeconds <= maxWindowSeconds + 1e-6;
+    windowSeconds = Math.min(maxWindowSeconds, windowSeconds + stepSeconds)
+  ) {
+    const windowSamples = Math.max(
+      1,
+      Math.round(windowSeconds * options.sampleRate),
+    );
+    let slice: Float32Array;
+    let offsetBaseSeconds = 0;
+    if (options.direction === "before") {
+      const startIndex = Math.max(0, totalSamples - windowSamples);
+      slice = options.samples.subarray(startIndex, totalSamples);
+      offsetBaseSeconds = (totalSamples - windowSamples) / options.sampleRate;
+    } else {
+      slice = options.samples.subarray(0, windowSamples);
+    }
+    const lowest = findLowestAmplitudeOffset({
+      samples: slice,
+      sampleRate: options.sampleRate,
+      rmsWindowMs: options.rmsWindowMs,
+    });
+    if (lowest && lowest.rms < options.rmsThreshold) {
+      return offsetBaseSeconds + lowest.offsetSeconds;
+    }
+    if (windowSeconds >= maxWindowSeconds) {
+      break;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Find speech end using RMS analysis with audio sample loading fallback.
  */

@@ -3,6 +3,8 @@ import {
   buildSilenceGapsFromSpeech,
   computeMinWindowRms,
   computeRms,
+  findLowestAmplitudeBoundaryProgressive,
+  findLowestAmplitudeOffset,
   findSilenceBoundaryFromGaps,
   findSilenceBoundaryProgressive,
   findSilenceBoundaryWithRms,
@@ -286,6 +288,43 @@ test("findSilenceBoundaryWithRms finds silence end for before direction", () => 
 test("findSilenceBoundaryWithRms returns null when silence is too short", () => {
   const options = createRmsOptions([1, 0, 1, 1], "after");
   expect(findSilenceBoundaryWithRms(options)).toBeNull();
+});
+
+test("findLowestAmplitudeOffset picks the lowest RMS window", () => {
+  const result = findLowestAmplitudeOffset({
+    samples: createSamples(1, 1, 1, 0, 0, 0),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+  });
+  expect(result).not.toBeNull();
+  expect(result?.offsetSeconds).toBeCloseTo(0.45, 3);
+  expect(result?.rms).toBeLessThan(0.2);
+});
+
+test("findLowestAmplitudeBoundaryProgressive uses closest low amplitude", () => {
+  const options = createProgressiveOptions(
+    [1, 1, 1, 1, 0, 0, 0, 1, 1, 1],
+    "before",
+    { startWindowSeconds: 0.2, stepSeconds: 0.2, maxWindowSeconds: 1 },
+  );
+  const boundary = findLowestAmplitudeBoundaryProgressive({
+    ...options,
+    rmsThreshold: 0.2,
+  });
+  expect(boundary).toBeCloseTo(0.55, 2);
+});
+
+test("findLowestAmplitudeBoundaryProgressive returns null without quiet audio", () => {
+  const options = createProgressiveOptions([1, 1, 1, 1, 1], "after", {
+    startWindowSeconds: 0.2,
+    stepSeconds: 0.2,
+    maxWindowSeconds: 0.5,
+  });
+  const boundary = findLowestAmplitudeBoundaryProgressive({
+    ...options,
+    rmsThreshold: 0.2,
+  });
+  expect(boundary).toBeNull();
 });
 
 test("findSilenceBoundaryProgressive widens window until silence is found", () => {

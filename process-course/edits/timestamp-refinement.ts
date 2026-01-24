@@ -2,7 +2,7 @@ import { readAudioSamples } from "../ffmpeg";
 import { CONFIG, EDIT_CONFIG } from "../config";
 import { clamp } from "../../utils";
 import { mergeTimeRanges } from "../utils/time-ranges";
-import { findSilenceBoundaryProgressive } from "../utils/audio-analysis";
+import { findLowestAmplitudeBoundaryProgressive } from "../utils/audio-analysis";
 import type { TimeRange } from "../types";
 import type { TranscriptWordWithIndex } from "./types";
 
@@ -135,13 +135,12 @@ async function findSilenceBoundary(options: {
     return null;
   }
 
-  const boundary = findSilenceBoundaryProgressive({
+  const boundary = findLowestAmplitudeBoundaryProgressive({
     samples,
     sampleRate: CONFIG.vadSampleRate,
     direction: options.direction,
     rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
     rmsThreshold: CONFIG.commandSilenceRmsThreshold,
-    minSilenceMs: EDIT_CONFIG.silenceMinDurationMs,
     startWindowSeconds: EDIT_CONFIG.silenceSearchStartSeconds,
     stepSeconds: EDIT_CONFIG.silenceSearchStepSeconds,
     maxWindowSeconds: windowDuration,
