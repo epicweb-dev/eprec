@@ -231,7 +231,7 @@ function isCommandStarter(word: string): boolean {
 /**
  * Build word-level timing from transcript segments.
  */
-function buildTranscriptWords(segments: TranscriptSegment[]): TranscriptWord[] {
+export function buildTranscriptWords(segments: TranscriptSegment[]): TranscriptWord[] {
   const words: TranscriptWord[] = [];
   const ordered = [...segments].sort((a, b) => a.start - b.start);
   for (const segment of ordered) {

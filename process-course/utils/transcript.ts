@@ -1,4 +1,7 @@
+import type { TranscriptSegment } from "../../whispercpp-transcribe";
+import type { TimeRange } from "../types";
 import { TRANSCRIPTION_PHRASES } from "../config";
+import { buildTranscriptWords } from "../jarvis-commands/parser";
 
 /**
  * Normalize skip phrases from CLI input.
@@ -66,4 +69,18 @@ export function normalizeWords(text: string): string[] {
       return [word];
     });
   return words;
+}
+
+export function findWordTimings(
+  segments: TranscriptSegment[],
+  word: string,
+): TimeRange[] {
+  const target = word.trim().toLowerCase();
+  if (!target) {
+    return [];
+  }
+  const words = buildTranscriptWords(segments);
+  return words
+    .filter((entry) => entry.word === target)
+    .map((entry) => ({ start: entry.start, end: entry.end }));
 }

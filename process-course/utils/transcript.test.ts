@@ -1,14 +1,30 @@
 import { test, expect } from "bun:test";
 import {
   countTranscriptWords,
+  findWordTimings,
   normalizeSkipPhrases,
   transcriptIncludesWord,
   normalizeWords,
 } from "./transcript";
 import { TRANSCRIPTION_PHRASES } from "../config";
+import type { TranscriptSegment } from "../../whispercpp-transcribe";
 
 function createPhrases(...phrases: string[]): string[] {
   return phrases;
+}
+
+function createSegment(
+  start: number,
+  end: number,
+  text: string,
+): TranscriptSegment {
+  return { start, end, text };
+}
+
+function createSegments(
+  ...segments: TranscriptSegment[]
+): TranscriptSegment[] {
+  return segments;
 }
 
 // normalizeSkipPhrases tests
@@ -225,4 +241,21 @@ test("normalizeWords handles complex sentence with commands", () => {
 
 test("normalizeWords handles multiple corrections in one string", () => {
   expect(normalizeWords("jervis badtake")).toEqual(["jarvis", "bad", "take"]);
+});
+
+// findWordTimings tests
+test("findWordTimings returns empty for missing segments", () => {
+  expect(findWordTimings(createSegments(), "jarvis")).toEqual([]);
+});
+
+test("findWordTimings returns jarvis timings with normalization", () => {
+  const segments = createSegments(
+    createSegment(0, 4, "Hello Jarvis"),
+    createSegment(4, 6, "jervis again"),
+  );
+
+  expect(findWordTimings(segments, "jarvis")).toEqual([
+    { start: 2, end: 4 },
+    { start: 4, end: 5 },
+  ]);
 });

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { formatSeconds } from "../utils";
 import { buildSummaryLogPath, buildJarvisWarningLogPath, buildJarvisEditLogPath, buildJarvisNoteLogPath } from "./paths";
 import { logInfo } from "./logging";
 import type { Chapter, JarvisWarning, JarvisEdit, JarvisNote } from "./types";
@@ -41,6 +42,16 @@ export async function writeJarvisLogs(options: {
             warning.outputPath,
           )}`,
         );
+        const timestampLabel =
+          warning.timestamps.length > 0
+            ? warning.timestamps
+                .map(
+                  (timestamp) =>
+                    `${formatSeconds(timestamp.start)}-${formatSeconds(timestamp.end)}`,
+                )
+                .join(", ")
+            : "unavailable";
+        warningLines.push(`  Jarvis timestamps: ${timestampLabel}`);
       });
     } else {
       warningLines.push("Detected in: none");
