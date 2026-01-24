@@ -56,17 +56,37 @@ export async function combineVideos(
     const paddingSeconds =
       (options.overlapPaddingMs ?? EDIT_CONFIG.speechBoundaryPaddingMs) / 1000;
 
-    const video1TrimEnd = await findVideo1TrimEnd({
+    const video1SpeechEnd = await findVideo1SpeechEnd({
       inputPath: video1Path,
       duration: video1Duration,
-      paddingSeconds,
     });
-    const { trimStart: video2TrimStart, trimEnd: video2TrimEnd } =
-      await findVideo2Trim({
+    const { speechStart: video2SpeechStart, speechEnd: video2SpeechEnd } =
+      await findVideo2SpeechBounds({
         inputPath: video2Path,
         duration: video2Duration,
-        paddingSeconds,
       });
+    const video1AvailableSilence = Math.max(0, video1Duration - video1SpeechEnd);
+    const video2AvailableSilence = Math.max(0, video2SpeechStart);
+    const { previousPaddingSeconds, currentPaddingSeconds } = allocateJoinPadding({
+      paddingSeconds,
+      previousAvailableSeconds: video1AvailableSilence,
+      currentAvailableSeconds: video2AvailableSilence,
+    });
+    const video1TrimEnd = clamp(
+      video1SpeechEnd + previousPaddingSeconds,
+      0,
+      video1Duration,
+    );
+    const video2TrimStart = clamp(
+      video2SpeechStart - currentPaddingSeconds,
+      0,
+      video2Duration,
+    );
+    const video2TrimEnd = clamp(
+      video2SpeechEnd + paddingSeconds,
+      0,
+      video2Duration,
+    );
 
     const segment1Path = path.join(tempDir, "segment-1.mp4");
     const segment2Path = path.join(tempDir, "segment-2.mp4");
@@ -173,10 +193,9 @@ async function applyOptionalEdits(
   return { video1Path, video2Path };
 }
 
-async function findVideo1TrimEnd(options: {
+async function findVideo1SpeechEnd(options: {
   inputPath: string;
   duration: number;
-  paddingSeconds: number;
 }): Promise<number> {
   const endSearchWindow = Math.min(
     options.duration * 0.3,
@@ -203,15 +222,13 @@ async function findVideo1TrimEnd(options: {
       effectiveSpeechEnd = endSearchStart + rmsSpeechEnd;
     }
   }
-  const safeEnd = effectiveSpeechEnd;
-  return clamp(safeEnd + options.paddingSeconds, 0, options.duration);
+  return effectiveSpeechEnd;
 }
 
-async function findVideo2Trim(options: {
+async function findVideo2SpeechBounds(options: {
   inputPath: string;
   duration: number;
-  paddingSeconds: number;
-}): Promise<{ trimStart: number; trimEnd: number }> {
+}): Promise<{ speechStart: number; speechEnd: number }> {
   const speechBounds = await detectSpeechBounds(
     options.inputPath,
     0,
@@ -230,10 +247,9 @@ async function findVideo2Trim(options: {
     }
   }
   const speechEnd = speechBounds.end;
-  const safeStart = speechStart;
   return {
-    trimStart: clamp(safeStart - options.paddingSeconds, 0, options.duration),
-    trimEnd: clamp(speechEnd + options.paddingSeconds, 0, options.duration),
+    speechStart,
+    speechEnd,
   };
 }
 
@@ -332,4 +348,42 @@ async function findSpeechStartWithRmsFallback(options: {
     rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
     rmsThreshold: CONFIG.commandSilenceRmsThreshold,
   });
+}
+
+function allocateJoinPadding(options: {
+  paddingSeconds: number;
+  previousAvailableSeconds: number;
+  currentAvailableSeconds: number;
+}): { previousPaddingSeconds: number; currentPaddingSeconds: number } {
+  const desiredTotal = options.paddingSeconds * 2;
+  const totalAvailable =
+    options.previousAvailableSeconds + options.currentAvailableSeconds;
+  const targetTotal = Math.min(desiredTotal, totalAvailable);
+  let previousPadding = Math.min(
+    options.paddingSeconds,
+    options.previousAvailableSeconds,
+  );
+  let currentPadding = Math.min(
+    options.paddingSeconds,
+    options.currentAvailableSeconds,
+  );
+  let remaining = targetTotal - (previousPadding + currentPadding);
+
+  if (remaining > 0) {
+    const extra = Math.min(
+      options.previousAvailableSeconds - previousPadding,
+      remaining,
+    );
+    previousPadding += extra;
+    remaining -= extra;
+  }
+  if (remaining > 0) {
+    const extra = Math.min(
+      options.currentAvailableSeconds - currentPadding,
+      remaining,
+    );
+    currentPadding += extra;
+  }
+
+  return { previousPaddingSeconds: previousPadding, currentPaddingSeconds: currentPadding };
 }

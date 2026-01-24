@@ -812,15 +812,25 @@ async function handleCombinePrevious(params: {
   }
   const finalCurrentStart = effectiveSpeechStart;
 
-  // Apply padding
+  // Apply padding (maximize total gap if one side lacks silence)
   const speechPaddingSeconds = EDIT_CONFIG.speechBoundaryPaddingMs / 1000;
+  const previousAvailableSilence = Math.max(
+    0,
+    previousOutputDuration - finalPreviousEnd,
+  );
+  const currentAvailableSilence = Math.max(0, finalCurrentStart);
+  const { previousPaddingSeconds, currentPaddingSeconds } = allocateJoinPadding({
+    paddingSeconds: speechPaddingSeconds,
+    previousAvailableSeconds: previousAvailableSilence,
+    currentAvailableSeconds: currentAvailableSilence,
+  });
   const previousPaddedEnd = clamp(
-    finalPreviousEnd + speechPaddingSeconds,
+    finalPreviousEnd + previousPaddingSeconds,
     0,
     previousOutputDuration,
   );
   const currentPaddedStart = clamp(
-    finalCurrentStart - speechPaddingSeconds,
+    finalCurrentStart - currentPaddingSeconds,
     0,
     spliceResult.sourceDuration,
   );
@@ -1025,4 +1035,42 @@ async function findSpeechStartWithRmsFallback(options: {
     rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
     rmsThreshold: CONFIG.commandSilenceRmsThreshold,
   });
+}
+
+function allocateJoinPadding(options: {
+  paddingSeconds: number;
+  previousAvailableSeconds: number;
+  currentAvailableSeconds: number;
+}): { previousPaddingSeconds: number; currentPaddingSeconds: number } {
+  const desiredTotal = options.paddingSeconds * 2;
+  const totalAvailable =
+    options.previousAvailableSeconds + options.currentAvailableSeconds;
+  const targetTotal = Math.min(desiredTotal, totalAvailable);
+  let previousPadding = Math.min(
+    options.paddingSeconds,
+    options.previousAvailableSeconds,
+  );
+  let currentPadding = Math.min(
+    options.paddingSeconds,
+    options.currentAvailableSeconds,
+  );
+  let remaining = targetTotal - (previousPadding + currentPadding);
+
+  if (remaining > 0) {
+    const extra = Math.min(
+      options.previousAvailableSeconds - previousPadding,
+      remaining,
+    );
+    previousPadding += extra;
+    remaining -= extra;
+  }
+  if (remaining > 0) {
+    const extra = Math.min(
+      options.currentAvailableSeconds - currentPadding,
+      remaining,
+    );
+    currentPadding += extra;
+  }
+
+  return { previousPaddingSeconds: previousPadding, currentPaddingSeconds: currentPadding };
 }

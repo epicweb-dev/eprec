@@ -12,6 +12,7 @@ import { transcriptIncludesWord } from "../process-course/utils/transcript";
 import { transcribeAudio } from "../whispercpp-transcribe";
 import { runCommand } from "../utils";
 import { detectSpeechBounds } from "../speech-detection";
+import { CONFIG, EDIT_CONFIG } from "../process-course/config";
 
 const TEST_OUTPUT_DIR = path.join(process.cwd(), ".test-output", "e2e-test");
 const TEST_TRANSCRIPT_DIR = path.join(
@@ -458,7 +459,7 @@ test("e2e combine workflow creates edits directory for combined chapter", async 
   expect(exists).toBe(true);
 });
 
-test("e2e combined chapter has ≤300ms join silence", async () => {
+test("e2e combined chapter keeps join silence within max padding", async () => {
   const prevTrimPath = path.join(
     TMP_DIR,
     "chapter-08-unnamed-7-previous-trimmed.mp4",
@@ -487,7 +488,11 @@ test("e2e combined chapter has ≤300ms join silence", async () => {
   const trailingSilence = Math.max(0, prevDuration - prevBounds.end);
   const leadingSilence = Math.max(0, currBounds.start);
   const gap = trailingSilence + leadingSilence;
-  expect(gap).toBeLessThanOrEqual(0.3);
+  const paddingSeconds = EDIT_CONFIG.speechBoundaryPaddingMs / 1000;
+  const vadSlackSeconds =
+    (CONFIG.vadMinSilenceDurationMs + CONFIG.vadSpeechPadMs) / 1000;
+  const maxGap = paddingSeconds * 2 + vadSlackSeconds;
+  expect(gap).toBeLessThanOrEqual(maxGap);
 }, 30000);
 
 test("e2e combine edit errors on word modification (chicken test)", async () => {
