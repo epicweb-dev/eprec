@@ -36,10 +36,13 @@ export async function combineVideos(
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "video-combine-"));
   try {
     const { video1Path, video2Path } = await applyOptionalEdits(options, tempDir);
-    const video1Duration =
-      options.video1Duration ?? (await getMediaDurationSeconds(video1Path));
-    const video2Duration =
-      options.video2Duration ?? (await getMediaDurationSeconds(video2Path));
+    const editsApplied = options.video1EditedTextPath || options.video2EditedTextPath;
+    const video1Duration = editsApplied
+      ? await getMediaDurationSeconds(video1Path)
+      : options.video1Duration ?? (await getMediaDurationSeconds(video1Path));
+    const video2Duration = editsApplied
+      ? await getMediaDurationSeconds(video2Path)
+      : options.video2Duration ?? (await getMediaDurationSeconds(video2Path));
 
     const video1HasSpeech = await checkSegmentHasSpeech(
       video1Path,

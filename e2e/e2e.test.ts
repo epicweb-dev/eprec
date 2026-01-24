@@ -10,7 +10,7 @@ import {
 import { extractTranscriptionAudio } from "../process-course/ffmpeg";
 import { transcriptIncludesWord } from "../process-course/utils/transcript";
 import { transcribeAudio } from "../whispercpp-transcribe";
-import { runCommand } from "../utils";
+import { runCommand, getMediaDurationSeconds } from "../utils";
 import { detectSpeechBounds } from "../speech-detection";
 import { CONFIG, EDIT_CONFIG } from "../process-course/config";
 
@@ -71,24 +71,6 @@ function createExpectedWordGroup(...words: string[]): string[] {
 async function ensureTranscriptDir(): Promise<string> {
   await mkdir(TEST_TRANSCRIPT_DIR, { recursive: true });
   return TEST_TRANSCRIPT_DIR;
-}
-
-async function getMediaDurationSeconds(filePath: string): Promise<number> {
-  const result = await runCommand([
-    "ffprobe",
-    "-v",
-    "error",
-    "-show_entries",
-    "format=duration",
-    "-of",
-    "default=noprint_wrappers=1:nokey=1",
-    filePath,
-  ]);
-  const duration = Number.parseFloat(result.stdout.trim());
-  if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error(`Invalid duration for ${filePath}: ${result.stdout}`);
-  }
-  return duration;
 }
 
 async function transcribeOutputVideo(outputPath: string): Promise<string> {
