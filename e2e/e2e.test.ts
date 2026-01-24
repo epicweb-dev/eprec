@@ -147,7 +147,7 @@ beforeAll(async () => {
 
   // Run the full pipeline
   const result =
-    await $`bun process-course-video.ts process ${FIXTURE_PATH} ${TEST_OUTPUT_DIR} --min-chapter-seconds 2 -k`.quiet();
+    await $`bun cli.ts process ${FIXTURE_PATH} ${TEST_OUTPUT_DIR} --min-chapter-seconds 2 -k`.quiet();
 
   if (result.exitCode !== 0) {
     console.error("Pipeline failed:", result.stderr.toString());

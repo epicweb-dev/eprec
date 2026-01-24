@@ -140,7 +140,7 @@ Models are automatically downloaded and cached:
 
 | File | Description |
 |------|-------------|
-| `process-course-video.ts` | Main CLI entry point (exposed as `eprec`) |
+| `cli.ts` | Main CLI entry point (exposed as `eprec`) |
 | `process-course/config.ts` | Shared constants and tuning parameters |
 | `process-course/logging.ts` | CLI logging helpers |
 | `process-course/paths.ts` | Output/intermediate path helpers |

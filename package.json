@@ -10,7 +10,7 @@
     "release": "npx semantic-release"
   },
   "bin": {
-    "eprec": "./process-course-video.ts"
+    "eprec": "./cli.ts"
   },
   "publishConfig": {
     "access": "public"
