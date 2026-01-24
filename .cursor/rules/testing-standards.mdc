@@ -67,6 +67,77 @@ test("functionName handles edge case", () => { ... });
 test("functionName throws for invalid input", () => { ... });
 ```
 
+## Disposable Objects for Cleanup
+
+When tests require cleanup (closing servers, removing temp files, etc.), use disposable objects to guarantee cleanup runs even if assertions fail. This avoids the need for `beforeEach`/`afterEach` hooks.
+
+### Synchronous Disposal
+
+Use `Symbol.dispose` with the `using` keyword for synchronous cleanup:
+
+```typescript
+function createTempResource() {
+  const resource = { data: "test" };
+  return {
+    resource,
+    [Symbol.dispose]() {
+      // Cleanup runs automatically when scope exits
+      console.log("Cleaned up!");
+    },
+  };
+}
+
+test("uses temp resource with automatic cleanup", () => {
+  using wrapper = createTempResource();
+  expect(wrapper.resource.data).toBe("test");
+  // Cleanup runs automatically, even if assertion fails
+});
+```
+
+### Asynchronous Disposal
+
+Use `Symbol.asyncDispose` with `await using` for async cleanup (servers, file handles, etc.):
+
+```typescript
+function createTestServer() {
+  const server = new Server();
+  return {
+    instance: server,
+    async [Symbol.asyncDispose]() {
+      await server.close();
+    },
+  };
+}
+
+test("test server closes automatically", async () => {
+  await using testServer = createTestServer();
+  await testServer.instance.listen();
+  // ... test logic ...
+  // Server closes automatically when test ends
+});
+```
+
+### When Utility Returns a Promise
+
+If the factory itself is async, await both the factory and the disposal:
+
+```typescript
+async function createAsyncResource() {
+  const connection = await connectToDb();
+  return {
+    db: connection,
+    async [Symbol.asyncDispose]() {
+      await connection.close();
+    },
+  };
+}
+
+test("async resource with async factory", async () => {
+  await using wrapper = await createAsyncResource();
+  // Use wrapper.db...
+});
+```
+
 References:
 - https://kentcdodds.com/blog/avoid-nesting-when-youre-testing
 - https://www.epicweb.dev/better-test-setup-with-disposable-objects
