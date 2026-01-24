@@ -19,7 +19,6 @@ import {
   buildTranscriptionOutputBase,
 } from "./paths";
 import { logInfo, logWarn, writeChapterLog } from "./logging";
-import { findSilenceBoundary } from "./jarvis-commands/windows";
 import { mergeTimeRanges, buildKeepRanges } from "./utils/time-ranges";
 import { findSpeechEndWithRms, findSpeechStartWithRms } from "./utils/audio-analysis";
 import { safeUnlink } from "./utils/file-utils";
@@ -798,27 +797,7 @@ async function handleCombinePrevious(params: {
     }
   }
 
-  // Find silence boundary before the end of speech
-  const previousTrimEnd = await findSilenceBoundary({
-    inputPath: previousProcessedChapter.outputPath,
-    duration: previousOutputDuration,
-    targetTime: effectiveSpeechEnd,
-    direction: "before",
-    maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
-  });
-
-  const rawPreviousEnd = previousTrimEnd ?? effectiveSpeechEnd;
-  const safePreviousEnd = Math.max(rawPreviousEnd, effectiveSpeechEnd);
-  const finalPreviousEnd = safePreviousEnd;
-
-  // Step 4: Trim start of current chapter at silence boundary
-  const currentTrimStart = await findSilenceBoundary({
-    inputPath: spliceResult.sourcePath,
-    duration: spliceResult.sourceDuration,
-    targetTime: currentSpeechBounds.start,
-    direction: "after",
-    maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
-  });
+  const finalPreviousEnd = effectiveSpeechEnd;
 
   let effectiveSpeechStart = currentSpeechBounds.start;
   if (currentSpeechBounds.note || currentSpeechBounds.start <= 0.05) {
@@ -831,8 +810,7 @@ async function handleCombinePrevious(params: {
       effectiveSpeechStart = rmsSpeechStart;
     }
   }
-  const rawCurrentStart = currentTrimStart ?? effectiveSpeechStart;
-  const finalCurrentStart = Math.min(rawCurrentStart, effectiveSpeechStart);
+  const finalCurrentStart = effectiveSpeechStart;
 
   // Apply padding
   const speechPaddingSeconds = EDIT_CONFIG.speechBoundaryPaddingMs / 1000;

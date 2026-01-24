@@ -2,7 +2,6 @@ import path from "node:path";
 import os from "node:os";
 import { copyFile, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { detectSpeechBounds, checkSegmentHasSpeech } from "../../speech-detection";
-import { findSilenceBoundary } from "../jarvis-commands/windows";
 import { extractChapterSegmentAccurate, concatSegments, readAudioSamples } from "../ffmpeg";
 import { clamp, runCommand } from "../../utils";
 import { CONFIG, EDIT_CONFIG } from "../config";
@@ -204,15 +203,7 @@ async function findVideo1TrimEnd(options: {
       effectiveSpeechEnd = endSearchStart + rmsSpeechEnd;
     }
   }
-  const silenceBoundary = await findSilenceBoundary({
-    inputPath: options.inputPath,
-    duration: options.duration,
-    targetTime: effectiveSpeechEnd,
-    direction: "before",
-    maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
-  });
-  const rawEnd = silenceBoundary ?? effectiveSpeechEnd;
-  const safeEnd = Math.max(rawEnd, effectiveSpeechEnd);
+  const safeEnd = effectiveSpeechEnd;
   return clamp(safeEnd + options.paddingSeconds, 0, options.duration);
 }
 
@@ -239,15 +230,7 @@ async function findVideo2Trim(options: {
     }
   }
   const speechEnd = speechBounds.end;
-  const silenceBoundary = await findSilenceBoundary({
-    inputPath: options.inputPath,
-    duration: options.duration,
-    targetTime: speechStart,
-    direction: "after",
-    maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
-  });
-  const rawStart = silenceBoundary ?? speechStart;
-  const safeStart = Math.min(rawStart, speechStart);
+  const safeStart = speechStart;
   return {
     trimStart: clamp(safeStart - options.paddingSeconds, 0, options.duration),
     trimEnd: clamp(speechEnd + options.paddingSeconds, 0, options.duration),
