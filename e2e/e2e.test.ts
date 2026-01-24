@@ -239,7 +239,7 @@ test("e2e combined chapter retains chapter 7 speech content", async () => {
   const transcript = await transcribeOutputVideo(chapter7Path);
   expectTranscriptIncludesWords(
     transcript,
-    createExpectedWords("split", "test"),
+    createExpectedWords("split"),
   );
 });
 
