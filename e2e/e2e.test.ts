@@ -7,11 +7,12 @@ import {
   buildJarvisWarningLogPath,
   buildJarvisNoteLogPath,
 } from "../process-course/paths";
-import { extractTranscriptionAudio } from "../process-course/ffmpeg";
+import { extractTranscriptionAudio, readAudioSamples } from "../process-course/ffmpeg";
+import { CONFIG } from "../process-course/config";
 import { transcriptIncludesWord } from "../process-course/utils/transcript";
-import { buildTranscriptWords, scaleTranscriptSegments } from "../process-course/jarvis-commands/parser";
 import { transcribeAudio } from "../whispercpp-transcribe";
 import { runCommand } from "../utils";
+import { detectSpeechSegmentsWithVad } from "../speech-detection";
 
 const TEST_OUTPUT_DIR = path.join(process.cwd(), ".test-output", "e2e-test");
 const TEST_TRANSCRIPT_DIR = path.join(
@@ -109,27 +110,38 @@ async function transcribeOutputVideo(outputPath: string): Promise<string> {
   return transcript.text;
 }
 
-async function transcribeOutputVideoWords(outputPath: string) {
-  const transcriptDir = await ensureTranscriptDir();
-  const baseName = path.parse(outputPath).name;
-  const audioPath = path.join(transcriptDir, `${baseName}-output-words.wav`);
-  const outputBasePath = path.join(
-    transcriptDir,
-    `${baseName}-output-words-transcript`,
-  );
+async function getMaxSpeechGapSeconds(outputPath: string): Promise<number> {
   const duration = await getMediaDurationSeconds(outputPath);
-  await extractTranscriptionAudio({
+  const samples = await readAudioSamples({
     inputPath: outputPath,
-    outputPath: audioPath,
     start: 0,
-    end: duration,
+    duration,
+    sampleRate: CONFIG.vadSampleRate,
   });
-  const transcription = await transcribeAudio(audioPath, { outputBasePath });
-  const segments =
-    transcription.segmentsSource === "tokens"
-      ? transcription.segments
-      : scaleTranscriptSegments(transcription.segments, duration);
-  return buildTranscriptWords(segments);
+  if (samples.length === 0) {
+    return 0;
+  }
+  const segments = await detectSpeechSegmentsWithVad(
+    samples,
+    CONFIG.vadSampleRate,
+    CONFIG,
+  );
+  if (segments.length < 2) {
+    return 0;
+  }
+  let maxGap = 0;
+  for (let index = 1; index < segments.length; index += 1) {
+    const prev = segments[index - 1];
+    const next = segments[index];
+    if (!prev || !next) {
+      continue;
+    }
+    const gap = next.start - prev.end;
+    if (gap > maxGap) {
+      maxGap = gap;
+    }
+  }
+  return maxGap;
 }
 
 function expectTranscriptIncludesWords(
@@ -482,29 +494,8 @@ test("e2e combine workflow creates edits directory for combined chapter", async 
 
 test("e2e combined chapter has ≤300ms join silence", async () => {
   const chapter7Path = path.join(TEST_OUTPUT_DIR, "chapter-07-unnamed-6.mp4");
-  const words = await transcribeOutputVideoWords(chapter7Path);
-
-  const lastTestIndex = [...words]
-    .map((word, index) => ({ word, index }))
-    .filter((entry) => entry.word.word === "test")
-    .map((entry) => entry.index)
-    .pop();
-  expect(lastTestIndex).toBeDefined();
-
-  const nextIndex = words.findIndex(
-    (word, index) =>
-      index > (lastTestIndex ?? -1) &&
-      (word.word === "this" || word.word === "content"),
-  );
-  expect(nextIndex).toBeGreaterThan(-1);
-
-  const prev = words[lastTestIndex ?? 0];
-  const next = words[nextIndex];
-  if (!prev || !next) {
-    throw new Error("Missing join boundary words for gap check.");
-  }
-  const gap = next.start - prev.end;
-  expect(gap).toBeLessThanOrEqual(0.3);
+  const maxGap = await getMaxSpeechGapSeconds(chapter7Path);
+  expect(maxGap).toBeLessThanOrEqual(0.3);
 }, 30000);
 
 test("e2e combine edit errors on word modification (chicken test)", async () => {
