@@ -151,6 +151,12 @@ test("extractTranscriptCommands ignores filename without value", () => {
   expect(commands).toHaveLength(0);
 });
 
+test("extractTranscriptCommands ignores file name without value", () => {
+  const segments = createSegments([0, 2, "Jarvis file name thanks"]);
+  const commands = extractTranscriptCommands(segments, defaultOptions);
+  expect(commands).toHaveLength(0);
+});
+
 // extractTranscriptCommands - edit
 test("extractTranscriptCommands extracts edit command", () => {
   const segments = createSegments([0, 2, "Jarvis edit thanks"]);
@@ -160,6 +166,43 @@ test("extractTranscriptCommands extracts edit command", () => {
     type: "edit",
     window: { start: 0, end: 2 },
   });
+});
+
+// extractTranscriptCommands - note
+test("extractTranscriptCommands extracts note command with value", () => {
+  const segments = createSegments([
+    0,
+    3,
+    "Jarvis note add more examples thanks",
+  ]);
+  const commands = extractTranscriptCommands(segments, defaultOptions);
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).toEqual({
+    type: "note",
+    value: "add more examples",
+    window: { start: 0, end: 3 },
+  });
+});
+
+test("extractTranscriptCommands ignores note without value", () => {
+  const segments = createSegments([0, 2, "Jarvis note thanks"]);
+  const commands = extractTranscriptCommands(segments, defaultOptions);
+  expect(commands).toHaveLength(0);
+});
+
+// extractTranscriptCommands - split
+test("extractTranscriptCommands extracts split command", () => {
+  const segments = createSegments([0, 2, "Jarvis split thanks"]);
+  const commands = extractTranscriptCommands(segments, defaultOptions);
+  expect(commands).toHaveLength(1);
+  expect(commands[0]?.type).toBe("split");
+});
+
+test("extractTranscriptCommands extracts new chapter as split", () => {
+  const segments = createSegments([0, 3, "Jarvis new chapter thanks"]);
+  const commands = extractTranscriptCommands(segments, defaultOptions);
+  expect(commands).toHaveLength(1);
+  expect(commands[0]?.type).toBe("split");
 });
 
 // extractTranscriptCommands - nevermind
@@ -187,6 +230,18 @@ test("extractTranscriptCommands extracts multiple commands", () => {
   expect(commands).toHaveLength(2);
   expect(commands[0]?.type).toBe("bad-take");
   expect(commands[1]?.type).toBe("filename");
+});
+
+test("extractTranscriptCommands extracts multiple commands in one segment", () => {
+  const segments = createSegments([
+    0,
+    4,
+    "Jarvis bad take thanks Jarvis edit thanks",
+  ]);
+  const commands = extractTranscriptCommands(segments, defaultOptions);
+  expect(commands).toHaveLength(2);
+  expect(commands[0]?.type).toBe("bad-take");
+  expect(commands[1]?.type).toBe("edit");
 });
 
 // extractTranscriptCommands - no commands
