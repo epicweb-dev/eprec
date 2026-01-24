@@ -735,7 +735,10 @@ async function handleCombinePrevious(params: {
   );
 
   // Convert relative bounds to absolute times (detectSpeechBounds returns bounds relative to chapterStart)
-  const absoluteSpeechEnd = previousEndSearchStart + previousEndSpeechBounds.end;
+  // However, when VAD fails and uses speechFallback, the returned end value is already absolute (duration)
+  const absoluteSpeechEnd = previousEndSpeechBounds.note
+    ? previousEndSpeechBounds.end  // Fallback case: already absolute
+    : previousEndSearchStart + previousEndSpeechBounds.end;  // Normal case: convert relative to absolute
 
   // Find silence boundary before the end of speech
   const previousTrimEnd = await findSilenceBoundary({
