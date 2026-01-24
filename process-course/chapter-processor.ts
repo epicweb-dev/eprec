@@ -18,6 +18,7 @@ import {
   buildTranscriptionOutputBase,
 } from "./paths";
 import { logInfo, logWarn, writeChapterLog } from "./logging";
+import { findSilenceBoundary } from "./jarvis-commands/windows";
 import { mergeTimeRanges, buildKeepRanges } from "./utils/time-ranges";
 import { safeUnlink } from "./utils/file-utils";
 import { formatChapterFilename } from "./utils/filename";
@@ -30,7 +31,7 @@ import {
   analyzeCommands,
   formatCommandTypes,
 } from "./jarvis-commands";
-import type { Chapter, TimeRange, JarvisWarning, JarvisEdit } from "./types";
+import type { Chapter, TimeRange, JarvisWarning, JarvisEdit, ProcessedChapterInfo } from "./types";
 
 export interface ChapterProcessingOptions {
   inputPath: string;
@@ -44,6 +45,7 @@ export interface ChapterProcessingOptions {
   keepIntermediates: boolean;
   writeLogs: boolean;
   dryRun: boolean;
+  previousProcessedChapter?: ProcessedChapterInfo | null;
 }
 
 export interface ChapterProcessingResult {
@@ -58,6 +60,7 @@ export interface ChapterProcessingResult {
   jarvisEdit?: JarvisEdit;
   fallbackNote?: string;
   logWritten: boolean;
+  processedInfo?: ProcessedChapterInfo;
 }
 
 /**
@@ -175,6 +178,27 @@ export async function processChapter(
       commandWindows = transcriptionResult.commandWindows;
       commandFilenameOverride = transcriptionResult.filenameOverride;
       hasEditCommand = transcriptionResult.hasEdit;
+
+      // Handle combine-previous command
+      if (transcriptionResult.hasCombinePrevious) {
+        if (!options.previousProcessedChapter) {
+          logWarn(
+            `Combine previous command detected for chapter ${chapter.index + 1}, but no previous chapter available. Processing normally.`,
+          );
+        } else {
+          return await handleCombinePrevious({
+            chapter,
+            previousProcessedChapter: options.previousProcessedChapter,
+            commandWindows,
+            normalizedPath: paths.normalizedPath,
+            rawDuration,
+            tmpDir: options.tmpDir,
+            outputBasePath,
+            paths,
+            options,
+          });
+        }
+      }
     }
 
     // Step 4: Determine final output path
@@ -301,12 +325,20 @@ export async function processChapter(
       );
     }
 
+    const processedInfo: ProcessedChapterInfo = {
+      chapter,
+      outputPath: finalOutputPath,
+      processedPath: finalOutputPath, // Use output path as processed path (intermediates may be cleaned up)
+      processedDuration: trimmedDuration,
+    };
+
     return {
       status: "processed",
       jarvisWarning,
       jarvisEdit,
       fallbackNote,
       logWritten,
+      processedInfo,
     };
   } finally {
     // Cleanup intermediate files
@@ -390,6 +422,7 @@ interface TranscriptionAnalysisResult {
   filenameOverride: string | null;
   hasEdit: boolean;
   hasBadTake: boolean;
+  hasCombinePrevious: boolean;
   shouldSkip: boolean;
   skipReason?: string;
 }
@@ -446,6 +479,7 @@ async function transcribeAndAnalyze(params: {
       filenameOverride: analysis.filenameOverride,
       hasEdit: analysis.hasEdit,
       hasBadTake: analysis.hasBadTake,
+      hasCombinePrevious: analysis.hasCombinePrevious,
       shouldSkip: true,
       skipReason: analysis.skipReason,
     };
@@ -471,6 +505,7 @@ async function transcribeAndAnalyze(params: {
     filenameOverride: analysis.filenameOverride,
     hasEdit: analysis.hasEdit,
     hasBadTake: analysis.hasBadTake,
+    hasCombinePrevious: analysis.hasCombinePrevious,
     shouldSkip: false,
   };
 }
@@ -593,4 +628,228 @@ async function handleCommandSplicing(params: {
   }
 
   return { sourcePath, sourceDuration };
+}
+
+async function handleCombinePrevious(params: {
+  chapter: Chapter;
+  previousProcessedChapter: ProcessedChapterInfo;
+  commandWindows: TimeRange[];
+  normalizedPath: string;
+  rawDuration: number;
+  tmpDir: string;
+  outputBasePath: string;
+  paths: IntermediatePaths;
+  options: ChapterProcessingOptions;
+}): Promise<ChapterProcessingResult> {
+  const {
+    chapter,
+    previousProcessedChapter,
+    commandWindows,
+    normalizedPath,
+    rawDuration,
+    tmpDir,
+    outputBasePath,
+    paths,
+    options,
+  } = params;
+
+  logInfo(
+    `Combining chapter ${chapter.index + 1} with previous chapter ${previousProcessedChapter.chapter.index + 1}`,
+  );
+
+  // Step 1: Remove combine-previous command window from current chapter
+  const spliceResult = await handleCommandSplicing({
+    commandWindows,
+    normalizedPath,
+    rawDuration,
+    tmpDir,
+    outputBasePath,
+    paths,
+  });
+
+  // Step 2: Detect speech bounds on current chapter (after splicing)
+  const currentSpeechBounds = await detectSpeechBounds(
+    spliceResult.sourcePath,
+    0,
+    spliceResult.sourceDuration,
+    spliceResult.sourceDuration,
+  );
+
+  // Step 3: Trim end of previous chapter's output
+  // Load the previous chapter's output and detect speech bounds on the end portion
+  const previousOutputDuration = previousProcessedChapter.processedDuration;
+  const endSearchWindow = Math.min(
+    previousOutputDuration * 0.3, // Search last 30% of previous chapter
+    CONFIG.commandSilenceSearchSeconds * 2, // Or up to 2x the silence search window
+  );
+  const previousEndSearchStart = Math.max(
+    0,
+    previousOutputDuration - endSearchWindow,
+  );
+
+  // Detect speech bounds on the end portion
+  const previousEndSpeechBounds = await detectSpeechBounds(
+    previousProcessedChapter.outputPath,
+    previousEndSearchStart,
+    previousOutputDuration,
+    previousOutputDuration,
+  );
+
+  // Find silence boundary before the end of speech
+  const previousTrimEnd = await findSilenceBoundary({
+    inputPath: previousProcessedChapter.outputPath,
+    duration: previousOutputDuration,
+    targetTime: previousEndSpeechBounds.end,
+    direction: "before",
+    maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
+  });
+
+  const finalPreviousEnd = previousTrimEnd ?? previousEndSpeechBounds.end;
+
+  // Step 4: Trim start of current chapter at silence boundary
+  const currentTrimStart = await findSilenceBoundary({
+    inputPath: spliceResult.sourcePath,
+    duration: spliceResult.sourceDuration,
+    targetTime: currentSpeechBounds.start,
+    direction: "after",
+    maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
+  });
+
+  const finalCurrentStart = currentTrimStart ?? currentSpeechBounds.start;
+
+  // Apply padding
+  const previousPaddedEnd = clamp(
+    finalPreviousEnd - CONFIG.postSpeechPaddingSeconds,
+    0,
+    previousOutputDuration,
+  );
+  const currentPaddedStart = clamp(
+    finalCurrentStart - CONFIG.preSpeechPaddingSeconds,
+    0,
+    spliceResult.sourceDuration,
+  );
+  const currentPaddedEnd = clamp(
+    currentSpeechBounds.end + CONFIG.postSpeechPaddingSeconds,
+    0,
+    spliceResult.sourceDuration,
+  );
+
+  logInfo(
+    `Previous chapter trim: ${formatSeconds(previousPaddedEnd)} (from ${formatSeconds(previousOutputDuration)})`,
+  );
+  logInfo(
+    `Current chapter trim: ${formatSeconds(currentPaddedStart)} -> ${formatSeconds(currentPaddedEnd)}`,
+  );
+
+  // Step 5: Extract trimmed segments
+  const previousTrimmedPath = buildIntermediatePath(
+    tmpDir,
+    outputBasePath,
+    "previous-trimmed",
+  );
+  await extractChapterSegmentAccurate({
+    inputPath: previousProcessedChapter.outputPath,
+    outputPath: previousTrimmedPath,
+    start: 0,
+    end: previousPaddedEnd,
+  });
+
+  const currentTrimmedPath = buildIntermediatePath(
+    tmpDir,
+    outputBasePath,
+    "current-trimmed",
+  );
+  await extractChapterSegmentAccurate({
+    inputPath: spliceResult.sourcePath,
+    outputPath: currentTrimmedPath,
+    start: currentPaddedStart,
+    end: currentPaddedEnd,
+  });
+
+  // Step 6: Check if segments have speech
+  const previousDuration = previousPaddedEnd;
+  const currentDuration = currentPaddedEnd - currentPaddedStart;
+  const previousHasSpeech = await checkSegmentHasSpeech(
+    previousTrimmedPath,
+    previousDuration,
+  );
+  const currentHasSpeech = await checkSegmentHasSpeech(
+    currentTrimmedPath,
+    currentDuration,
+  );
+
+  if (!previousHasSpeech || !currentHasSpeech) {
+    throw new Error(
+      `Cannot combine: ${!previousHasSpeech ? "previous" : "current"} segment has no speech.`,
+    );
+  }
+
+  // Step 7: Delete old previous chapter output and concatenate segments to final path
+  const finalOutputPath = previousProcessedChapter.outputPath;
+  await safeUnlink(finalOutputPath);
+  
+  const combinedDuration = previousDuration + currentDuration;
+  await concatSegments({
+    segmentPaths: [previousTrimmedPath, currentTrimmedPath],
+    outputPath: finalOutputPath,
+  });
+
+  logInfo(
+    `Combined output written to ${path.basename(finalOutputPath)} (${formatSeconds(combinedDuration)})`,
+  );
+
+  // Step 9: Cleanup intermediate files
+  await safeUnlink(previousTrimmedPath);
+  await safeUnlink(currentTrimmedPath);
+
+  // Step 10: Verify no jarvis in final output
+  let jarvisWarning: JarvisWarning | undefined;
+  const jarvisTranscriptionAudioPath = buildIntermediateAudioPath(
+    tmpDir,
+    outputBasePath,
+    "jarvis-combined",
+  );
+  await extractTranscriptionAudio({
+    inputPath: finalOutputPath,
+    outputPath: jarvisTranscriptionAudioPath,
+    start: 0,
+    end: combinedDuration,
+  });
+  const jarvisTranscription = await transcribeAudio(
+    jarvisTranscriptionAudioPath,
+    {
+      modelPath: options.whisperModelPath,
+      language: options.whisperLanguage,
+      binaryPath: options.whisperBinaryPath,
+      outputBasePath: buildJarvisOutputBase(tmpDir, outputBasePath),
+    },
+  );
+  if (transcriptIncludesWord(jarvisTranscription.text, "jarvis")) {
+    jarvisWarning = {
+      chapter: previousProcessedChapter.chapter,
+      outputPath: finalOutputPath,
+    };
+    logWarn(
+      `Jarvis detected in combined chapter: ${path.basename(finalOutputPath)}`,
+    );
+  }
+
+  if (!options.keepIntermediates) {
+    await safeUnlink(jarvisTranscriptionAudioPath);
+  }
+
+  // Return combined chapter info (using previous chapter's info but with updated duration)
+  const processedInfo: ProcessedChapterInfo = {
+    chapter: previousProcessedChapter.chapter,
+    outputPath: finalOutputPath,
+    processedPath: finalOutputPath,
+    processedDuration: combinedDuration,
+  };
+
+  return {
+    status: "processed",
+    jarvisWarning,
+    logWritten: false,
+    processedInfo,
+  };
 }

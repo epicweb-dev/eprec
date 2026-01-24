@@ -205,6 +205,17 @@ test("extractTranscriptCommands extracts new chapter as split", () => {
   expect(commands[0]?.type).toBe("split");
 });
 
+// extractTranscriptCommands - combine-previous
+test("extractTranscriptCommands extracts combine previous command", () => {
+  const segments = createSegments([0, 3, "Jarvis combine previous thanks"]);
+  const commands = extractTranscriptCommands(segments, defaultOptions);
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).toEqual({
+    type: "combine-previous",
+    window: { start: 0, end: 3 },
+  });
+});
+
 // extractTranscriptCommands - nevermind
 test("extractTranscriptCommands extracts nevermind cancellation", () => {
   const segments = createSegments([0, 3, "Jarvis oops nevermind thanks"]);

@@ -116,7 +116,7 @@ export async function refineCommandWindows(options: {
   return mergeTimeRanges(refined);
 }
 
-async function findSilenceBoundary(options: {
+export async function findSilenceBoundary(options: {
   inputPath: string;
   duration: number;
   targetTime: number;

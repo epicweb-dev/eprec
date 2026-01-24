@@ -16,6 +16,7 @@ export function analyzeCommands(
 
   const hasBadTake = commands.some((command) => command.type === "bad-take");
   const hasEdit = commands.some((command) => command.type === "edit");
+  const hasCombinePrevious = commands.some((command) => command.type === "combine-previous");
 
   const notes = commands
     .filter((command) => command.type === "note" && command.value?.trim())
@@ -52,6 +53,7 @@ export function analyzeCommands(
     filenameOverride,
     hasBadTake,
     hasEdit,
+    hasCombinePrevious,
     notes,
     splits,
     shouldSkip,

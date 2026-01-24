@@ -61,3 +61,11 @@ export type JarvisSplit = {
   outputPath: string;
   timestamp: number;
 };
+
+export type ProcessedChapterInfo = {
+  chapter: Chapter;
+  outputPath: string;
+  // The path to the normalized/processed video before final trimming
+  processedPath: string;
+  processedDuration: number;
+};

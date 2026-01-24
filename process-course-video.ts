@@ -10,7 +10,7 @@ import {
   processChapter,
   type ChapterProcessingOptions,
 } from "./process-course/chapter-processor";
-import type { JarvisEdit, JarvisWarning } from "./process-course/types";
+import type { JarvisEdit, JarvisWarning, ProcessedChapterInfo } from "./process-course/types";
 import { formatSeconds } from "./utils";
 
 interface ProcessingSummary {
@@ -181,8 +181,13 @@ async function processInputFile(options: {
     dryRun,
   };
 
+  let previousProcessedChapter: ProcessedChapterInfo | null = null;
+
   for (const chapter of selectedChapters) {
-    const result = await processChapter(chapter, processingOptions);
+    const result = await processChapter(chapter, {
+      ...processingOptions,
+      previousProcessedChapter,
+    });
 
     // Update summary based on result
     if (result.status === "processed") {
@@ -233,6 +238,12 @@ async function processInputFile(options: {
     if (result.jarvisEdit) {
       jarvisEdits.push(result.jarvisEdit);
     }
+
+    // Update previous processed chapter for combine logic
+    if (result.status === "processed" && result.processedInfo) {
+      previousProcessedChapter = result.processedInfo;
+    }
+    // If combined, previousProcessedChapter stays the same (points to combined output)
   }
 
   // Always write jarvis logs (summary information)

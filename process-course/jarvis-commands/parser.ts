@@ -206,6 +206,9 @@ function parseCommand(
   if (words.length >= 2 && words[0] === "new" && words[1] === "chapter") {
     return { type: "split", window };
   }
+  if (words.length >= 2 && words[0] === "combine" && words[1] === "previous") {
+    return { type: "combine-previous", window };
+  }
   return null;
 }
 
@@ -220,7 +223,8 @@ function isCommandStarter(word: string): boolean {
     word === "edit" ||
     word === "note" ||
     word === "split" ||
-    word === "new"
+    word === "new" ||
+    word === "combine"
   );
 }
 
