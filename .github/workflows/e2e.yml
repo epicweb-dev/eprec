@@ -1,0 +1,57 @@
+name: e2e
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v5
+
+      - name: ⎔ Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 🧰 Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg whisper-cpp
+
+      - name: 🔧 Ensure whisper-cli available
+        run: |
+          if ! command -v whisper-cli >/dev/null 2>&1; then
+            if command -v whisper-cpp >/dev/null 2>&1; then
+              sudo ln -s "$(command -v whisper-cpp)" /usr/local/bin/whisper-cli
+            fi
+          fi
+          if ! command -v whisper-cli >/dev/null 2>&1; then
+            echo "whisper-cli not found on PATH."
+            exit 1
+          fi
+
+      - name: 📦 Cache models
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: ${{ runner.os }}-e2e-cache-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-cache-
+
+      - name: 📥 Download deps
+        run: bun install
+        env:
+          HUSKY_SKIP_INSTALL: true
+
+      - name: 🧪 Run e2e tests
+        run: bun run test:e2e
