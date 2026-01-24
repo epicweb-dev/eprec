@@ -1,8 +1,10 @@
 {
-  "name": "epic-recording",
+  "name": "eprec",
   "type": "module",
   "version": "0.0.0",
+  "license": "MIT",
   "scripts": {
+    "format": "prettier --write .",
     "test": "bun test process-course utils.test.ts",
     "test:e2e": "bun test e2e",
     "test:all": "bun test",

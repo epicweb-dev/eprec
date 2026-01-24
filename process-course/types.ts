@@ -1,85 +1,85 @@
 export type Chapter = {
-  index: number;
-  start: number;
-  end: number;
-  title: string;
-};
+	index: number
+	start: number
+	end: number
+	title: string
+}
 
 export type LoudnormAnalysis = {
-  input_i: string;
-  input_tp: string;
-  input_lra: string;
-  input_thresh: string;
-  target_offset: string;
-};
+	input_i: string
+	input_tp: string
+	input_lra: string
+	input_thresh: string
+	target_offset: string
+}
 
 export type SpeechBounds = {
-  start: number;
-  end: number;
-  note?: string;
-};
+	start: number
+	end: number
+	note?: string
+}
 
 export type TimeRange = {
-  start: number;
-  end: number;
-};
+	start: number
+	end: number
+}
 
-export type SilenceBoundaryDirection = "before" | "after";
+export type SilenceBoundaryDirection = 'before' | 'after'
 
 export type JarvisWarning = {
-  chapter: Chapter;
-  outputPath: string;
-  timestamps: TimeRange[];
-};
+	chapter: Chapter
+	outputPath: string
+	timestamps: TimeRange[]
+}
 
 export type JarvisEdit = {
-  chapter: Chapter;
-  outputPath: string;
-};
+	chapter: Chapter
+	outputPath: string
+}
 
-export type EditReason = "edit-command" | "combine-previous" | "jarvis-warning";
+export type EditReason = 'edit-command' | 'combine-previous' | 'jarvis-warning'
 
 export type EditWorkspaceInfo = {
-  chapter: Chapter;
-  outputPath: string;
-  reason: EditReason;
-  editsDirectory: string;
-  transcriptTextPath: string;
-  transcriptJsonPath: string;
-  originalVideoPath: string;
-  instructionsPath: string;
-};
+	chapter: Chapter
+	outputPath: string
+	reason: EditReason
+	editsDirectory: string
+	transcriptTextPath: string
+	transcriptJsonPath: string
+	originalVideoPath: string
+	instructionsPath: string
+}
 
 export type ChapterRange = {
-  start: number;
-  end: number | null;
-};
+	start: number
+	end: number | null
+}
 
 export type ChapterSelection = {
-  base: 0 | 1;
-  ranges: ChapterRange[];
-};
+	base: 0 | 1
+	ranges: ChapterRange[]
+}
 
 // Re-export from jarvis-commands for backward compatibility
-export type { TranscriptCommand, TranscriptWord } from "./jarvis-commands/types";
+export type { TranscriptCommand, TranscriptWord } from './jarvis-commands/types'
 
 export type JarvisNote = {
-  chapter: Chapter;
-  outputPath: string;
-  note: string;
-  timestamp: number;
-};
+	chapter: Chapter
+	outputPath: string
+	note: string
+	timestamp: number
+}
 
 export type JarvisSplit = {
-  chapter: Chapter;
-  outputPath: string;
-  timestamp: number;
-};
+	chapter: Chapter
+	outputPath: string
+	timestamp: number
+}
 
 export type ProcessedChapterInfo = {
-  chapter: Chapter;
-  outputPath: string;
-  // The path to the normalized/processed video before final trimming
-  processedPath: string;
-  processedDuration: number;
-};
+	chapter: Chapter
+	outputPath: string
+	// The path to the normalized/processed video before final trimming
+	processedPath: string
+	processedDuration: number
+}

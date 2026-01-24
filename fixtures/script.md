@@ -1,6 +1,8 @@
 # E2E Test Recording Script
 
-Record this as a single video with OBS chapters. Keep each chapter **under 5 seconds** of speech. Speak naturally but efficiently—this is for automated testing, not a demo.
+Record this as a single video with OBS chapters. Keep each chapter **under 5
+seconds** of speech. Speak naturally but efficiently—this is for automated
+testing, not a demo.
 
 Run with: `--min-chapter-seconds 2`
 
@@ -20,7 +22,8 @@ Run with: `--min-chapter-seconds 2`
 
 ## Chapter 3: Filename Override
 
-> Jarvis filename custom output name thanks. This chapter tests the filename command.
+> Jarvis filename custom output name thanks. This chapter tests the filename
+> command.
 
 ---
 
@@ -38,7 +41,8 @@ Run with: `--min-chapter-seconds 2`
 
 ## Chapter 6: Nevermind Cancellation
 
-> Let me say something. Jarvis nevermind thanks. That command should be removed but this speech kept.
+> Let me say something. Jarvis nevermind thanks. That command should be removed
+> but this speech kept.
 
 ---
 
@@ -58,7 +62,8 @@ Run with: `--min-chapter-seconds 2`
 
 > Hi.
 
-_(This chapter should be skipped for being under the minimum duration threshold)_
+_(This chapter should be skipped for being under the minimum duration
+threshold)_
 
 ---
 

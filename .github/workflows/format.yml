@@ -1,11 +1,10 @@
 name: Auto Format
-
 on:
   workflow_run:
-    workflows: ["Test"]
+    workflows: ['validate']
     types:
       - completed
-    branches: [main]
+    branches: ['main']
   workflow_dispatch:
 
 concurrency:
@@ -17,44 +16,42 @@ jobs:
     name: 🧹 Auto Format
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: >
-      ${{
-        github.event_name == 'workflow_dispatch' ||
-        (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push')
-      }}
+    # Only run if the validate workflow completed successfully and was triggered by a push to main
+    if:
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' }}
     permissions:
       contents: write
       actions: write
-      workflows: write
     steps:
       - name: ⬇️ Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Bun
+      - name: ⎔ Setup bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: 📥 Download deps
+        run: bun install
 
-      - name: Run Prettier
-        run: bunx prettier --write .
-
-      - name: Configure git
+      - name: 🔧 Configure git
         run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
+          git config --global user.email "me+bot@kentcdodds.com"
+          git config --global user.name "Kody 🐨"
 
-      - name: Commit changes
+      - name: 🎨 Run Prettier
+        run:
+          bunx prettier --write "**/*.{js,jsx,ts,tsx,md,css}" --ignore-path
+          .prettierignore
+
+      - name: 💾 Commit changes
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git add .
-            git commit -m "chore: format"
+            git commit -m "chore: cleanup 🧹"
             git push
             echo "Changes committed and pushed."
           else
