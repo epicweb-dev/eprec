@@ -255,7 +255,17 @@ async function findVideo2SpeechBounds(options: {
       speechStart = rmsSpeechStart;
     }
   }
-  const speechEnd = speechBounds.end;
+  let speechEnd = speechBounds.end;
+  if (speechBounds.note || options.duration - speechBounds.end < 0.05) {
+    const rmsSpeechEnd = await findSpeechEndWithRmsFallback({
+      inputPath: options.inputPath,
+      start: 0,
+      duration: options.duration,
+    });
+    if (rmsSpeechEnd !== null) {
+      speechEnd = rmsSpeechEnd;
+    }
+  }
   return {
     speechStart,
     speechEnd,

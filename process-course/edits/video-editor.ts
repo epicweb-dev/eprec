@@ -150,14 +150,10 @@ export async function editVideo(options: EditVideoOptions): Promise<EditVideoRes
         });
         segmentPaths.push(segmentPath);
       }
-      if (segmentPaths.length === 1) {
-        await ensureOutputCopy(segmentPaths[0], options.outputPath);
-      } else {
-        await concatSegments({
-          segmentPaths,
-          outputPath: options.outputPath,
-        });
-      }
+      await concatSegments({
+        segmentPaths,
+        outputPath: options.outputPath,
+      });
       return {
         success: true,
         outputPath: options.outputPath,

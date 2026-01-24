@@ -812,6 +812,19 @@ async function handleCombinePrevious(params: {
   }
   const finalCurrentStart = effectiveSpeechStart;
 
+  let currentEffectiveSpeechEnd = currentSpeechBounds.end;
+  if (currentSpeechBounds.note || spliceResult.sourceDuration - currentSpeechBounds.end < 0.05) {
+    const rmsSpeechEnd = await findSpeechEndWithRmsFallback({
+      inputPath: spliceResult.sourcePath,
+      start: 0,
+      duration: spliceResult.sourceDuration,
+    });
+    if (rmsSpeechEnd !== null) {
+      currentEffectiveSpeechEnd = rmsSpeechEnd;
+    }
+  }
+  const finalCurrentEnd = currentEffectiveSpeechEnd;
+
   // Apply padding (maximize total gap if one side lacks silence)
   const speechPaddingSeconds = EDIT_CONFIG.speechBoundaryPaddingMs / 1000;
   const previousAvailableSilence = Math.max(
@@ -835,7 +848,7 @@ async function handleCombinePrevious(params: {
     spliceResult.sourceDuration,
   );
   const currentPaddedEnd = clamp(
-    currentSpeechBounds.end + speechPaddingSeconds,
+    finalCurrentEnd + speechPaddingSeconds,
     0,
     spliceResult.sourceDuration,
   );
