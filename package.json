@@ -1,15 +1,24 @@
 {
   "name": "epic-recording",
   "type": "module",
-  "private": true,
+  "version": "0.0.0",
   "scripts": {
     "test": "bun test process-course utils.test.ts",
     "test:e2e": "bun test e2e",
-    "test:all": "bun test"
+    "test:all": "bun test",
+    "validate": "bun run test"
   },
   "bin": {
     "eprec": "./cli.ts"
   },
+  "files": [
+    "cli.ts",
+    "process-course/**",
+    "process-course-video.ts",
+    "speech-detection.ts",
+    "utils.ts",
+    "whispercpp-transcribe.ts"
+  ],
   "prettier": "@epic-web/config/prettier",
   "devDependencies": {
     "@epic-web/config": "^1.21.3",
