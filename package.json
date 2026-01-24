@@ -7,9 +7,12 @@
     "test:e2e": "bun test e2e",
     "test:all": "bun test"
   },
+  "prettier": "@epic-web/config/prettier",
   "devDependencies": {
+    "@epic-web/config": "^1.21.3",
     "@types/bun": "latest",
-    "@types/yargs": "^17.0.35"
+    "@types/yargs": "^17.0.35",
+    "prettier": "^3.8.1"
   },
   "peerDependencies": {
     "typescript": "^5"
