@@ -10,7 +10,6 @@ import {
   extractChapterSegmentAccurate,
   extractTranscriptionAudio,
   renderChapter,
-  readAudioSamples,
 } from "./ffmpeg";
 import {
   buildIntermediateAudioPath,
@@ -20,10 +19,11 @@ import {
 } from "./paths";
 import { logInfo, logWarn, writeChapterLog } from "./logging";
 import { mergeTimeRanges, buildKeepRanges } from "./utils/time-ranges";
-import { findSpeechEndWithRms, findSpeechStartWithRms } from "./utils/audio-analysis";
+import { findSpeechEndWithRmsFallback, findSpeechStartWithRmsFallback } from "./utils/audio-analysis";
 import { safeUnlink } from "./utils/file-utils";
 import { formatChapterFilename } from "./utils/filename";
 import { findWordTimings, transcriptIncludesWord } from "./utils/transcript";
+import { allocateJoinPadding } from "./utils/video-editing";
 import {
   extractTranscriptCommands,
   scaleTranscriptSegments,
@@ -865,6 +865,11 @@ async function handleCombinePrevious(params: {
     outputBasePath,
     "current-trimmed",
   );
+  if (currentPaddedEnd <= currentPaddedStart + 0.005) {
+    throw new Error(
+      `Invalid trim bounds for current segment: start (${currentPaddedStart.toFixed(3)}s) >= end (${currentPaddedEnd.toFixed(3)}s)`,
+    );
+  }
   await extractChapterSegmentAccurate({
     inputPath: spliceResult.sourcePath,
     outputPath: currentTrimmedPath,
@@ -985,92 +990,4 @@ async function handleCombinePrevious(params: {
     processedInfo,
     editWorkspace,
   };
-}
-
-async function findSpeechEndWithRmsFallback(options: {
-  inputPath: string;
-  start: number;
-  duration: number;
-}): Promise<number | null> {
-  if (options.duration <= 0.05) {
-    return null;
-  }
-  const samples = await readAudioSamples({
-    inputPath: options.inputPath,
-    start: options.start,
-    duration: options.duration,
-    sampleRate: CONFIG.vadSampleRate,
-  });
-  if (samples.length === 0) {
-    return null;
-  }
-  return findSpeechEndWithRms({
-    samples,
-    sampleRate: CONFIG.vadSampleRate,
-    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
-    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
-  });
-}
-
-async function findSpeechStartWithRmsFallback(options: {
-  inputPath: string;
-  start: number;
-  duration: number;
-}): Promise<number | null> {
-  if (options.duration <= 0.05) {
-    return null;
-  }
-  const samples = await readAudioSamples({
-    inputPath: options.inputPath,
-    start: options.start,
-    duration: options.duration,
-    sampleRate: CONFIG.vadSampleRate,
-  });
-  if (samples.length === 0) {
-    return null;
-  }
-  return findSpeechStartWithRms({
-    samples,
-    sampleRate: CONFIG.vadSampleRate,
-    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
-    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
-  });
-}
-
-function allocateJoinPadding(options: {
-  paddingSeconds: number;
-  previousAvailableSeconds: number;
-  currentAvailableSeconds: number;
-}): { previousPaddingSeconds: number; currentPaddingSeconds: number } {
-  const desiredTotal = options.paddingSeconds * 2;
-  const totalAvailable =
-    options.previousAvailableSeconds + options.currentAvailableSeconds;
-  const targetTotal = Math.min(desiredTotal, totalAvailable);
-  let previousPadding = Math.min(
-    options.paddingSeconds,
-    options.previousAvailableSeconds,
-  );
-  let currentPadding = Math.min(
-    options.paddingSeconds,
-    options.currentAvailableSeconds,
-  );
-  let remaining = targetTotal - (previousPadding + currentPadding);
-
-  if (remaining > 0) {
-    const extra = Math.min(
-      options.previousAvailableSeconds - previousPadding,
-      remaining,
-    );
-    previousPadding += extra;
-    remaining -= extra;
-  }
-  if (remaining > 0) {
-    const extra = Math.min(
-      options.currentAvailableSeconds - currentPadding,
-      remaining,
-    );
-    currentPadding += extra;
-  }
-
-  return { previousPaddingSeconds: previousPadding, currentPaddingSeconds: currentPadding };
 }

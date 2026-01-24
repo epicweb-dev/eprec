@@ -2,11 +2,12 @@ import path from "node:path";
 import os from "node:os";
 import { copyFile, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { detectSpeechBounds, checkSegmentHasSpeech } from "../../speech-detection";
-import { extractChapterSegmentAccurate, concatSegments, readAudioSamples } from "../ffmpeg";
-import { clamp, runCommand } from "../../utils";
-import { CONFIG, EDIT_CONFIG } from "../config";
+import { extractChapterSegmentAccurate, concatSegments } from "../ffmpeg";
+import { clamp, getMediaDurationSeconds } from "../../utils";
+import { EDIT_CONFIG } from "../config";
 import { editVideo } from "./video-editor";
-import { findSpeechEndWithRms, findSpeechStartWithRms } from "../utils/audio-analysis";
+import { findSpeechEndWithRmsFallback, findSpeechStartWithRmsFallback } from "../utils/audio-analysis";
+import { allocateJoinPadding } from "../utils/video-editing";
 
 export interface CombineVideosOptions {
   video1Path: string;
@@ -96,6 +97,14 @@ export async function combineVideos(
       start: 0,
       end: video1TrimEnd,
     });
+    if (video2TrimEnd <= video2TrimStart + 0.005) {
+      return {
+        success: false,
+        error: `Invalid trim bounds for second video: start (${video2TrimStart.toFixed(3)}s) >= end (${video2TrimEnd.toFixed(3)}s)`,
+        video1TrimEnd,
+        video2TrimStart,
+      };
+    }
     await extractChapterSegmentAccurate({
       inputPath: video2Path,
       outputPath: segment2Path,
@@ -280,110 +289,4 @@ async function finalizeOutput(tempOutputPath: string, outputPath: string) {
   } catch {
     await copyFile(tempOutputPath, outputPath);
   }
-}
-
-async function getMediaDurationSeconds(filePath: string): Promise<number> {
-  const result = await runCommand([
-    "ffprobe",
-    "-v",
-    "error",
-    "-show_entries",
-    "format=duration",
-    "-of",
-    "default=noprint_wrappers=1:nokey=1",
-    filePath,
-  ]);
-  const duration = Number.parseFloat(result.stdout.trim());
-  if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error(`Invalid duration for ${filePath}: ${result.stdout}`);
-  }
-  return duration;
-}
-
-async function findSpeechEndWithRmsFallback(options: {
-  inputPath: string;
-  start: number;
-  duration: number;
-}): Promise<number | null> {
-  if (options.duration <= 0.05) {
-    return null;
-  }
-  const samples = await readAudioSamples({
-    inputPath: options.inputPath,
-    start: options.start,
-    duration: options.duration,
-    sampleRate: CONFIG.vadSampleRate,
-  });
-  if (samples.length === 0) {
-    return null;
-  }
-  return findSpeechEndWithRms({
-    samples,
-    sampleRate: CONFIG.vadSampleRate,
-    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
-    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
-  });
-}
-
-async function findSpeechStartWithRmsFallback(options: {
-  inputPath: string;
-  start: number;
-  duration: number;
-}): Promise<number | null> {
-  if (options.duration <= 0.05) {
-    return null;
-  }
-  const samples = await readAudioSamples({
-    inputPath: options.inputPath,
-    start: options.start,
-    duration: options.duration,
-    sampleRate: CONFIG.vadSampleRate,
-  });
-  if (samples.length === 0) {
-    return null;
-  }
-  return findSpeechStartWithRms({
-    samples,
-    sampleRate: CONFIG.vadSampleRate,
-    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
-    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
-  });
-}
-
-function allocateJoinPadding(options: {
-  paddingSeconds: number;
-  previousAvailableSeconds: number;
-  currentAvailableSeconds: number;
-}): { previousPaddingSeconds: number; currentPaddingSeconds: number } {
-  const desiredTotal = options.paddingSeconds * 2;
-  const totalAvailable =
-    options.previousAvailableSeconds + options.currentAvailableSeconds;
-  const targetTotal = Math.min(desiredTotal, totalAvailable);
-  let previousPadding = Math.min(
-    options.paddingSeconds,
-    options.previousAvailableSeconds,
-  );
-  let currentPadding = Math.min(
-    options.paddingSeconds,
-    options.currentAvailableSeconds,
-  );
-  let remaining = targetTotal - (previousPadding + currentPadding);
-
-  if (remaining > 0) {
-    const extra = Math.min(
-      options.previousAvailableSeconds - previousPadding,
-      remaining,
-    );
-    previousPadding += extra;
-    remaining -= extra;
-  }
-  if (remaining > 0) {
-    const extra = Math.min(
-      options.currentAvailableSeconds - currentPadding,
-      remaining,
-    );
-    currentPadding += extra;
-  }
-
-  return { previousPaddingSeconds: previousPadding, currentPaddingSeconds: currentPadding };
 }

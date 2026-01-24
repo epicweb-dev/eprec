@@ -13,7 +13,7 @@ import {
   generateTranscriptJson,
   generateTranscriptText,
 } from "./transcript-output";
-import { runCommand } from "../../utils";
+import { getMediaDurationSeconds } from "../../utils";
 
 async function main() {
   const argv = yargs(hideBin(process.argv))
@@ -74,24 +74,6 @@ async function findOriginalVideo(editsDir: string): Promise<string> {
     throw new Error(`No original video found in ${editsDir}.`);
   }
   return path.join(editsDir, originalFile);
-}
-
-async function getMediaDurationSeconds(filePath: string): Promise<number> {
-  const result = await runCommand([
-    "ffprobe",
-    "-v",
-    "error",
-    "-show_entries",
-    "format=duration",
-    "-of",
-    "default=noprint_wrappers=1:nokey=1",
-    filePath,
-  ]);
-  const duration = Number.parseFloat(result.stdout.trim());
-  if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error(`Invalid duration for ${filePath}: ${result.stdout}`);
-  }
-  return duration;
 }
 
 main().catch((error) => {

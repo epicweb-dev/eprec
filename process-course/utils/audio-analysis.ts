@@ -1,4 +1,6 @@
 import type { SilenceBoundaryDirection, SpeechBounds, TimeRange } from "../types";
+import { readAudioSamples } from "../ffmpeg";
+import { CONFIG } from "../config";
 
 /**
  * Compute the RMS (root mean square) of audio samples.
@@ -223,4 +225,60 @@ export function findSilenceBoundaryWithRms(options: {
   }
 
   return null;
+}
+
+/**
+ * Find speech end using RMS analysis with audio sample loading fallback.
+ */
+export async function findSpeechEndWithRmsFallback(options: {
+  inputPath: string;
+  start: number;
+  duration: number;
+}): Promise<number | null> {
+  if (options.duration <= 0.05) {
+    return null;
+  }
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start: options.start,
+    duration: options.duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return null;
+  }
+  return findSpeechEndWithRms({
+    samples,
+    sampleRate: CONFIG.vadSampleRate,
+    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
+    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
+  });
+}
+
+/**
+ * Find speech start using RMS analysis with audio sample loading fallback.
+ */
+export async function findSpeechStartWithRmsFallback(options: {
+  inputPath: string;
+  start: number;
+  duration: number;
+}): Promise<number | null> {
+  if (options.duration <= 0.05) {
+    return null;
+  }
+  const samples = await readAudioSamples({
+    inputPath: options.inputPath,
+    start: options.start,
+    duration: options.duration,
+    sampleRate: CONFIG.vadSampleRate,
+  });
+  if (samples.length === 0) {
+    return null;
+  }
+  return findSpeechStartWithRms({
+    samples,
+    sampleRate: CONFIG.vadSampleRate,
+    rmsWindowMs: CONFIG.commandSilenceRmsWindowMs,
+    rmsThreshold: CONFIG.commandSilenceRmsThreshold,
+  });
 }
