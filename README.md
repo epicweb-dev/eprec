@@ -50,7 +50,8 @@ Manual test checklist:
 ## Releases and commit messages
 
 Releases are automated with semantic-release. Commit messages must follow
-Conventional Commits so versions and changelogs are generated correctly.
-See `docs/commit-convention.md` and `docs/release-process.md`.
+Conventional Commits so versions and GitHub release notes are generated
+correctly. See `.cursor/rules/commit-convention.mdc` and
+`docs/release-process.md`.
 
 This project was created using `bun init` in bun v1.3.1. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

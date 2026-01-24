@@ -1,7 +1,13 @@
+---
+description: Conventional commit message format
+globs: "*"
+alwaysApply: true
+---
+
 # Commit convention
 
 This repo uses Conventional Commits so semantic-release can automate versions
-and changelogs.
+and GitHub release notes.
 
 ## Format
 

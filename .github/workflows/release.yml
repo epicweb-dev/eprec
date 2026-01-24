@@ -31,7 +31,7 @@ jobs:
         run: bun install
 
       - name: Run semantic-release
-        run: bunx semantic-release --config release-config.cjs
+        run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
