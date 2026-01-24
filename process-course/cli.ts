@@ -33,10 +33,10 @@ export function parseCliArgs(): CliArgs {
   const parser = yargs(rawArgs)
     .scriptName("eprec")
     .usage(
-      "Usage: $0 <input.mp4|input.mkv> [input2.mp4 ...] [output-dir] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]\n  If the last positional argument doesn't have a video extension, it's treated as the output directory.",
+      "Usage: $0 process <input.mp4|input.mkv> [input2.mp4 ...] [output-dir] [--output-dir <dir>] [--min-chapter-seconds <number>] [--dry-run] [--keep-intermediates] [--write-logs] [--enable-transcription]\n  If the last positional argument doesn't have a video extension, it's treated as the output directory.",
     )
     .command(
-      "$0 <input...>",
+      "process <input...>",
       "Process chapters into separate files",
       (command: Argv) =>
         command
@@ -108,6 +108,7 @@ export function parseCliArgs(): CliArgs {
               "Only process selected chapters (e.g. 4, 4-6, 4,6,9-12, 4-*)",
           }),
     )
+    .demandCommand(1, "A command is required.")
     .check((args: Arguments) => {
       const minChapterSeconds = args["min-chapter-seconds"];
       if (minChapterSeconds !== undefined) {

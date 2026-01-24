@@ -17,13 +17,15 @@ A Bun-based CLI that processes recorded course videos by splitting chapter marke
 
 ```bash
 bun add -g @epic-web/recording
-eprec "/path/to/input.mp4" "/path/to/output" \
+eprec process "/path/to/input.mp4" "/path/to/output" \
   --enable-transcription \
   --keep-intermediates \
   --write-logs
 ```
 
 ## CLI Options
+
+Run processing with `eprec process ...` and pass the options below.
 
 | Option | Alias | Description | Default |
 |--------|-------|-------------|---------|

@@ -13,7 +13,7 @@ bun add -g @epic-web/recording
 ## Usage
 
 ```bash
-eprec "/path/to/input.mp4" "/path/to/output" --enable-transcription
+eprec process "/path/to/input.mp4" "/path/to/output" --enable-transcription
 ```
 
 ## Development
@@ -34,7 +34,7 @@ The default small English model is downloaded on first use and cached at
 `.cache/whispercpp/ggml-small.en.bin`. Replace that file (or pass
 `--whisper-model-path`) to use a different model.
 
-Enable transcription with `--enable-transcription` when running `eprec`
+Enable transcription with `--enable-transcription` when running `eprec process`
 to skip chapters that include "jarvis bad take"
 or "bad take jarvis". If the CLI isn't on your PATH, pass
 `--whisper-binary-path` with the full path to `whisper-cli`.
