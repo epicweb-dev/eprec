@@ -163,24 +163,26 @@ export function parseCliArgs(): CliArgs {
       : null;
 
   if (!outputDir && inputPaths.length > 0) {
-    const lastArg = inputPaths[inputPaths.length - 1]!;
-    const videoExtensions = [
-      ".mp4",
-      ".mkv",
-      ".avi",
-      ".mov",
-      ".webm",
-      ".flv",
-      ".m4v",
-    ];
-    const hasVideoExtension = videoExtensions.some((ext) =>
-      lastArg.toLowerCase().endsWith(ext),
-    );
+    const lastArg = inputPaths.at(-1) ?? null;
+    if (lastArg !== null) {
+      const videoExtensions = [
+        ".mp4",
+        ".mkv",
+        ".avi",
+        ".mov",
+        ".webm",
+        ".flv",
+        ".m4v",
+      ];
+      const hasVideoExtension = videoExtensions.some((ext) =>
+        lastArg.toLowerCase().endsWith(ext),
+      );
 
-    if (!hasVideoExtension) {
-      // Last argument is likely the output directory
-      outputDir = lastArg;
-      inputPaths = inputPaths.slice(0, -1); // Remove the last argument from inputs
+      if (!hasVideoExtension) {
+        // Last argument is likely the output directory
+        outputDir = lastArg;
+        inputPaths = inputPaths.slice(0, -1); // Remove the last argument from inputs
+      }
     }
   }
 
