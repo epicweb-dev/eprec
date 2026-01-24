@@ -114,3 +114,21 @@ export function normalizeFilename(value: string) {
       String(numberWords[word] ?? word).padStart(2, "0"),
     );
 }
+
+export async function getMediaDurationSeconds(filePath: string): Promise<number> {
+  const result = await runCommand([
+    "ffprobe",
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=noprint_wrappers=1:nokey=1",
+    filePath,
+  ]);
+  const duration = Number.parseFloat(result.stdout.trim());
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`Invalid duration for ${filePath}: ${result.stdout}`);
+  }
+  return duration;
+}

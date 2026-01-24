@@ -3,8 +3,13 @@ import {
   buildSilenceGapsFromSpeech,
   computeMinWindowRms,
   computeRms,
+  findLowestAmplitudeBoundaryProgressive,
+  findLowestAmplitudeOffset,
   findSilenceBoundaryFromGaps,
+  findSilenceBoundaryProgressive,
   findSilenceBoundaryWithRms,
+  findSpeechEndWithRms,
+  findSpeechStartWithRms,
   speechFallback,
 } from "./audio-analysis";
 import type { TimeRange } from "../types";
@@ -43,6 +48,34 @@ function createRmsOptions(
     rmsWindowMs: overrides.rmsWindowMs ?? 100,
     rmsThreshold: overrides.rmsThreshold ?? 0.5,
     minSilenceMs: overrides.minSilenceMs ?? 200,
+  };
+}
+
+function createProgressiveOptions(
+  samples: number[],
+  direction: "before" | "after",
+  overrides: Partial<{
+    sampleRate: number;
+    startWindowSeconds: number;
+    stepSeconds: number;
+    maxWindowSeconds: number;
+    rmsWindowMs: number;
+    rmsThreshold: number;
+    minSilenceMs: number;
+  }> = {},
+) {
+  const sampleRate = overrides.sampleRate ?? 10;
+  const maxWindowSeconds = overrides.maxWindowSeconds ?? samples.length / sampleRate;
+  return {
+    samples: createSamples(...samples),
+    sampleRate,
+    direction,
+    startWindowSeconds: overrides.startWindowSeconds ?? 0.2,
+    stepSeconds: overrides.stepSeconds ?? 0.2,
+    maxWindowSeconds,
+    rmsWindowMs: overrides.rmsWindowMs ?? 100,
+    rmsThreshold: overrides.rmsThreshold ?? 0.5,
+    minSilenceMs: overrides.minSilenceMs ?? 100,
   };
 }
 
@@ -149,6 +182,46 @@ test("computeMinWindowRms handles mixed positive and negative", () => {
   expect(computeMinWindowRms(samples, 2)).toBeCloseTo(0.1);
 });
 
+test("findSpeechStartWithRms finds first non-silent window", () => {
+  const start = findSpeechStartWithRms({
+    samples: createSamples(0, 0, 0, 1, 1),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+    rmsThreshold: 0.5,
+  });
+  expect(start).toBeCloseTo(0.3, 3);
+});
+
+test("findSpeechStartWithRms returns null for silence", () => {
+  const start = findSpeechStartWithRms({
+    samples: createSamples(0, 0, 0, 0),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+    rmsThreshold: 0.1,
+  });
+  expect(start).toBeNull();
+});
+
+test("findSpeechEndWithRms finds last non-silent window", () => {
+  const end = findSpeechEndWithRms({
+    samples: createSamples(1, 1, 0, 0),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+    rmsThreshold: 0.5,
+  });
+  expect(end).toBeCloseTo(0.2, 3);
+});
+
+test("findSpeechEndWithRms returns null for silence", () => {
+  const end = findSpeechEndWithRms({
+    samples: createSamples(0, 0, 0, 0),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+    rmsThreshold: 0.1,
+  });
+  expect(end).toBeNull();
+});
+
 // buildSilenceGapsFromSpeech tests
 test("buildSilenceGapsFromSpeech returns full gap for no speech", () => {
   expect(buildSilenceGapsFromSpeech([], 10)).toEqual([createRange(0, 10)]);
@@ -215,4 +288,60 @@ test("findSilenceBoundaryWithRms finds silence end for before direction", () => 
 test("findSilenceBoundaryWithRms returns null when silence is too short", () => {
   const options = createRmsOptions([1, 0, 1, 1], "after");
   expect(findSilenceBoundaryWithRms(options)).toBeNull();
+});
+
+test("findLowestAmplitudeOffset picks the lowest RMS window", () => {
+  const result = findLowestAmplitudeOffset({
+    samples: createSamples(1, 1, 1, 0, 0, 0),
+    sampleRate: 10,
+    rmsWindowMs: 100,
+  });
+  expect(result).not.toBeNull();
+  expect(result?.offsetSeconds).toBeCloseTo(0.35, 3);
+  expect(result?.rms).toBeLessThan(0.2);
+});
+
+test("findLowestAmplitudeBoundaryProgressive uses closest low amplitude", () => {
+  const options = createProgressiveOptions(
+    [1, 1, 1, 1, 0, 0, 0, 1, 1, 1],
+    "before",
+    { startWindowSeconds: 0.2, stepSeconds: 0.2, maxWindowSeconds: 1 },
+  );
+  const boundary = findLowestAmplitudeBoundaryProgressive({
+    ...options,
+    rmsThreshold: 0.2,
+  });
+  expect(boundary).toBeCloseTo(0.65, 2);
+});
+
+test("findLowestAmplitudeBoundaryProgressive returns null without quiet audio", () => {
+  const options = createProgressiveOptions([1, 1, 1, 1, 1], "after", {
+    startWindowSeconds: 0.2,
+    stepSeconds: 0.2,
+    maxWindowSeconds: 0.5,
+  });
+  const boundary = findLowestAmplitudeBoundaryProgressive({
+    ...options,
+    rmsThreshold: 0.2,
+  });
+  expect(boundary).toBeNull();
+});
+
+test("findSilenceBoundaryProgressive widens window until silence is found", () => {
+  const options = createProgressiveOptions(
+    [1, 1, 1, 1, 1, 0, 0, 1, 1, 1],
+    "before",
+    { startWindowSeconds: 0.2, stepSeconds: 0.2, maxWindowSeconds: 1 },
+  );
+  const boundary = findSilenceBoundaryProgressive(options);
+  expect(boundary).toBeCloseTo(0.7, 3);
+});
+
+test("findSilenceBoundaryProgressive returns null when no silence exists", () => {
+  const options = createProgressiveOptions([1, 1, 1, 1, 1], "after", {
+    startWindowSeconds: 0.2,
+    stepSeconds: 0.2,
+    maxWindowSeconds: 0.5,
+  });
+  expect(findSilenceBoundaryProgressive(options)).toBeNull();
 });

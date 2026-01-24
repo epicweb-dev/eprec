@@ -37,6 +37,19 @@ export type JarvisEdit = {
   outputPath: string;
 };
 
+export type EditReason = "edit-command" | "combine-previous" | "jarvis-warning";
+
+export type EditWorkspaceInfo = {
+  chapter: Chapter;
+  outputPath: string;
+  reason: EditReason;
+  editsDirectory: string;
+  transcriptTextPath: string;
+  transcriptJsonPath: string;
+  originalVideoPath: string;
+  instructionsPath: string;
+};
+
 export type ChapterRange = {
   start: number;
   end: number | null;
