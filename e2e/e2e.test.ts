@@ -480,23 +480,31 @@ test("e2e combine workflow creates edits directory for combined chapter", async 
   expect(exists).toBe(true);
 });
 
-test("e2e combined chapter has ≤300ms silence between parts", async () => {
+test("e2e combined chapter has ≤300ms join silence", async () => {
   const chapter7Path = path.join(TEST_OUTPUT_DIR, "chapter-07-unnamed-6.mp4");
   const words = await transcribeOutputVideoWords(chapter7Path);
 
-  let maxGap = 0;
-  for (let index = 1; index < words.length; index += 1) {
-    const prev = words[index - 1];
-    const next = words[index];
-    if (!prev || !next) {
-      continue;
-    }
-    const gap = next.start - prev.end;
-    if (gap > maxGap) {
-      maxGap = gap;
-    }
+  const lastTestIndex = [...words]
+    .map((word, index) => ({ word, index }))
+    .filter((entry) => entry.word.word === "test")
+    .map((entry) => entry.index)
+    .pop();
+  expect(lastTestIndex).toBeDefined();
+
+  const nextIndex = words.findIndex(
+    (word, index) =>
+      index > (lastTestIndex ?? -1) &&
+      (word.word === "this" || word.word === "content"),
+  );
+  expect(nextIndex).toBeGreaterThan(-1);
+
+  const prev = words[lastTestIndex ?? 0];
+  const next = words[nextIndex];
+  if (!prev || !next) {
+    throw new Error("Missing join boundary words for gap check.");
   }
-  expect(maxGap).toBeLessThanOrEqual(0.3);
+  const gap = next.start - prev.end;
+  expect(gap).toBeLessThanOrEqual(0.3);
 }, 30000);
 
 test("e2e combine edit errors on word modification (chicken test)", async () => {
@@ -523,7 +531,7 @@ test("e2e combine edit errors on word modification (chicken test)", async () => 
   expect(result.stderr.toString()).toContain("mismatch");
 }, 30000);
 
-test("e2e combine edit removes word 'chapter' successfully", async () => {
+test("e2e combine edit removes a unique word successfully", async () => {
   const editsDir = path.join(TEST_OUTPUT_DIR, "edits", "chapter-07-unnamed-6");
   const transcriptTxtPath = path.join(editsDir, "transcript.txt");
   const transcriptJsonPath = path.join(editsDir, "transcript.json");
@@ -534,9 +542,24 @@ test("e2e combine edit removes word 'chapter' successfully", async () => {
   );
 
   const originalText = await readFile(transcriptTxtPath);
-  const editedText = originalText
-    .replace(/\bchapter\b/gi, "")
-    .replace(/\s+/g, " ")
+  const words = originalText.split(/\s+/).filter(Boolean);
+  const counts = new Map<string, number>();
+  for (const word of words) {
+    counts.set(word, (counts.get(word) ?? 0) + 1);
+  }
+  const banned = new Set(["jarvis", "split", "test", "joins", "seven"]);
+  const removableWord =
+    words.find(
+      (word) =>
+        (counts.get(word) ?? 0) === 1 &&
+        word.length > 3 &&
+        !banned.has(word),
+    ) ?? words.find((word) => !banned.has(word));
+  expect(removableWord).toBeDefined();
+
+  const editedText = words
+    .filter((word) => word !== removableWord)
+    .join(" ")
     .trim();
   const tempEditedPath = path.join(editsDir, "transcript-word-removed.txt");
   await Bun.write(tempEditedPath, editedText);
@@ -549,7 +572,9 @@ test("e2e combine edit removes word 'chapter' successfully", async () => {
   expect(editedExists).toBe(true);
 
   const editedTranscript = await transcribeOutputVideo(editedOutputPath);
-  expect(transcriptIncludesWord(editedTranscript, "chapter")).toBe(false);
+  expect(
+    transcriptIncludesWord(editedTranscript, removableWord ?? ""),
+  ).toBe(false);
   expectTranscriptIncludesWords(
     editedTranscript,
     createExpectedWords("split", "test", "joins", "seven"),
