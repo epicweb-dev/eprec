@@ -26,15 +26,18 @@ jobs:
       - name: 🧰 Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg whisper-cpp
+          sudo apt-get install -y ffmpeg build-essential cmake
+
+      - name: 🧠 Build whisper.cpp CLI
+        run: |
+          if ! command -v whisper-cli >/dev/null 2>&1; then
+            git clone --depth=1 --branch v1.8.3 https://github.com/ggerganov/whisper.cpp.git /tmp/whisper.cpp
+            make -C /tmp/whisper.cpp build
+            sudo install -m 0755 /tmp/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
+          fi
 
       - name: 🔧 Ensure whisper-cli available
         run: |
-          if ! command -v whisper-cli >/dev/null 2>&1; then
-            if command -v whisper-cpp >/dev/null 2>&1; then
-              sudo ln -s "$(command -v whisper-cpp)" /usr/local/bin/whisper-cli
-            fi
-          fi
           if ! command -v whisper-cli >/dev/null 2>&1; then
             echo "whisper-cli not found on PATH."
             exit 1
