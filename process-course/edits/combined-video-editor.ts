@@ -200,12 +200,13 @@ async function findVideo1TrimEnd(options: {
     maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
   });
   const rawEnd = silenceBoundary ?? speechEnd;
+  const safeEnd = Math.max(rawEnd, speechEnd);
   const minAllowedEnd = Math.max(
     0,
     options.duration - CONFIG.commandSilenceMaxBackwardSeconds,
   );
-  const safeEnd = rawEnd < minAllowedEnd ? options.duration : rawEnd;
-  return clamp(safeEnd + options.paddingSeconds, 0, options.duration);
+  const finalEnd = safeEnd < minAllowedEnd ? options.duration : safeEnd;
+  return clamp(finalEnd + options.paddingSeconds, 0, options.duration);
 }
 
 async function findVideo2Trim(options: {
@@ -229,8 +230,9 @@ async function findVideo2Trim(options: {
     maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
   });
   const rawStart = silenceBoundary ?? speechStart;
+  const safeStart = Math.min(rawStart, speechStart);
   return {
-    trimStart: clamp(rawStart - options.paddingSeconds, 0, options.duration),
+    trimStart: clamp(safeStart - options.paddingSeconds, 0, options.duration),
     trimEnd: clamp(speechEnd + options.paddingSeconds, 0, options.duration),
   };
 }

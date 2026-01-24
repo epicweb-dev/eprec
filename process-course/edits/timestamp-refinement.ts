@@ -46,14 +46,16 @@ export async function refineRemovalRange(options: {
     })) ?? options.range.end;
   const paddedStart = clamp(refinedStart + paddingSeconds, 0, options.duration);
   const paddedEnd = clamp(refinedEnd - paddingSeconds, 0, options.duration);
+  const adjustedStart = Math.min(paddedStart, options.range.start);
+  const adjustedEnd = Math.max(paddedEnd, options.range.end);
 
-  if (paddedEnd <= paddedStart + 0.005) {
+  if (adjustedEnd <= adjustedStart + 0.005) {
     return { original: options.range, refined: options.range };
   }
 
   return {
     original: options.range,
-    refined: { start: paddedStart, end: paddedEnd },
+    refined: { start: adjustedStart, end: adjustedEnd },
   };
 }
 

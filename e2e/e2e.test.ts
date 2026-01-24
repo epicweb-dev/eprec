@@ -1,5 +1,5 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { $ } from "bun";
 import {
@@ -24,8 +24,17 @@ const FIXTURE_PATH = path.resolve("fixtures/e2e-test.mp4");
 
 // Helper to check if file exists
 async function fileExists(filePath: string): Promise<boolean> {
-  const file = Bun.file(filePath);
-  return file.exists();
+  try {
+    await stat(filePath);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error) {
+      if (error.code === "ENOENT") {
+        return false;
+      }
+    }
+    throw error;
+  }
 }
 
 // Helper to read file contents

@@ -792,10 +792,11 @@ async function handleCombinePrevious(params: {
   });
 
   const rawPreviousEnd = previousTrimEnd ?? absoluteSpeechEnd;
+  const safePreviousEnd = Math.max(rawPreviousEnd, absoluteSpeechEnd);
   const maxTrimBackSeconds = CONFIG.commandSilenceMaxBackwardSeconds;
   const minAllowedEnd = Math.max(0, previousOutputDuration - maxTrimBackSeconds);
   const finalPreviousEnd =
-    rawPreviousEnd < minAllowedEnd ? previousOutputDuration : rawPreviousEnd;
+    safePreviousEnd < minAllowedEnd ? previousOutputDuration : safePreviousEnd;
 
   // Step 4: Trim start of current chapter at silence boundary
   const currentTrimStart = await findSilenceBoundary({
@@ -806,7 +807,8 @@ async function handleCombinePrevious(params: {
     maxSearchSeconds: EDIT_CONFIG.speechSearchWindowSeconds,
   });
 
-  const finalCurrentStart = currentTrimStart ?? currentSpeechBounds.start;
+  const rawCurrentStart = currentTrimStart ?? currentSpeechBounds.start;
+  const finalCurrentStart = Math.min(rawCurrentStart, currentSpeechBounds.start);
 
   // Apply padding
   const speechPaddingSeconds = EDIT_CONFIG.speechBoundaryPaddingMs / 1000;
