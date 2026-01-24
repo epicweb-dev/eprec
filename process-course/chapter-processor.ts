@@ -734,16 +734,26 @@ async function handleCombinePrevious(params: {
     previousOutputDuration,
   );
 
+  // Convert relative bounds to absolute times (detectSpeechBounds returns bounds relative to chapterStart)
+  // However, when VAD fails and uses speechFallback, the returned end value is already absolute (duration)
+  const absoluteSpeechEnd = previousEndSpeechBounds.note
+    ? previousEndSpeechBounds.end  // Fallback case: already absolute
+    : previousEndSearchStart + previousEndSpeechBounds.end;  // Normal case: convert relative to absolute
+
   // Find silence boundary before the end of speech
   const previousTrimEnd = await findSilenceBoundary({
     inputPath: previousProcessedChapter.outputPath,
     duration: previousOutputDuration,
-    targetTime: previousEndSpeechBounds.end,
+    targetTime: absoluteSpeechEnd,
     direction: "before",
     maxSearchSeconds: CONFIG.commandSilenceSearchSeconds,
   });
 
-  const finalPreviousEnd = previousTrimEnd ?? previousEndSpeechBounds.end;
+  const rawPreviousEnd = previousTrimEnd ?? absoluteSpeechEnd;
+  const maxTrimBackSeconds = CONFIG.commandSilenceMaxBackwardSeconds;
+  const minAllowedEnd = Math.max(0, previousOutputDuration - maxTrimBackSeconds);
+  const finalPreviousEnd =
+    rawPreviousEnd < minAllowedEnd ? previousOutputDuration : rawPreviousEnd;
 
   // Step 4: Trim start of current chapter at silence boundary
   const currentTrimStart = await findSilenceBoundary({
@@ -758,7 +768,7 @@ async function handleCombinePrevious(params: {
 
   // Apply padding
   const previousPaddedEnd = clamp(
-    finalPreviousEnd - CONFIG.postSpeechPaddingSeconds,
+    finalPreviousEnd,
     0,
     previousOutputDuration,
   );
