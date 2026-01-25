@@ -27,11 +27,22 @@ export function EditingWorkspace(handle: Handle) {
 	let previewPlaying = false
 	let previewNode: HTMLVideoElement | null = null
 	let lastSyncedPlayhead = playhead
+	let isScrubbing = false
 
 	const setPlayhead = (value: number) => {
 		playhead = clamp(value, 0, duration)
 		syncVideoToPlayhead(playhead)
 		handle.update()
+	}
+
+	const startScrubbing = () => {
+		isScrubbing = true
+	}
+
+	const stopScrubbing = () => {
+		if (!isScrubbing) return
+		isScrubbing = false
+		syncVideoToPlayhead(playhead)
 	}
 
 	const selectRange = (rangeId: string) => {
@@ -298,6 +309,8 @@ export function EditingWorkspace(handle: Handle) {
 										}
 										const handleTimeUpdate = () => {
 											if (!previewReady || previewDuration <= 0) return
+											if (isScrubbing) return
+											if (!previewPlaying) return
 											const mapped =
 												(node.currentTime / previewDuration) * duration
 											if (Math.abs(mapped - lastSyncedPlayhead) <= 0.05) {
@@ -383,8 +396,15 @@ export function EditingWorkspace(handle: Handle) {
 									on={{
 										input: (event) => {
 											const target = event.currentTarget as HTMLInputElement
+											startScrubbing()
 											setPlayhead(Number(target.value))
 										},
+										pointerdown: startScrubbing,
+										pointerup: stopScrubbing,
+										pointercancel: stopScrubbing,
+										keydown: startScrubbing,
+										keyup: stopScrubbing,
+										blur: stopScrubbing,
 									}}
 								/>
 								<button
