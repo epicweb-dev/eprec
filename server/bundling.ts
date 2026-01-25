@@ -51,7 +51,7 @@ async function resolvePackageExport(
 	const exportPath =
 		typeof exportEntry === 'string'
 			? exportEntry
-			: exportEntry.default || exportEntry.types
+			: exportEntry.default
 
 	if (!exportPath) return null
 
@@ -133,6 +133,10 @@ export function createBundlingRoutes(rootDir: string) {
 		return new Response(output, {
 			headers: {
 				'Content-Type': 'application/javascript',
+				'Cache-Control':
+					Bun.env.NODE_ENV === 'production'
+						? 'public, max-age=31536000, immutable'
+						: 'no-cache',
 				...BUNDLING_CORS_HEADERS,
 			},
 		})
@@ -156,6 +160,14 @@ export function createBundlingRoutes(rootDir: string) {
 			if (!filepath) {
 				return new Response('Package not found', {
 					status: 404,
+					headers: BUNDLING_CORS_HEADERS,
+				})
+			}
+
+			const nodeModulesDir = path.resolve(rootDir, 'node_modules')
+			if (!filepath.startsWith(nodeModulesDir + path.sep)) {
+				return new Response('Forbidden', {
+					status: 403,
 					headers: BUNDLING_CORS_HEADERS,
 				})
 			}

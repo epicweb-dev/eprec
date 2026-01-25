@@ -45,7 +45,10 @@ export async function startAppServer(options: AppServerOptions = {}) {
 	const desiredPort = options.port ?? env.PORT
 	const port = await getServerPort(env.NODE_ENV, desiredPort)
 	const server = startServer(port, host)
-	const url = `http://${server.hostname}:${server.port}`
+	const hostname = server.hostname.includes(':')
+		? `[${server.hostname}]`
+		: server.hostname
+	const url = `http://${hostname}:${server.port}`
 
 	console.log(`[app] running at ${url}`)
 

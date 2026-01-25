@@ -1,6 +1,5 @@
 import { html } from 'remix/html-template'
 import { Layout } from '../components/layout.tsx'
-import routes from '../config/routes.ts'
 import { render } from '../helpers/render.ts'
 
 const indexHandler = {
