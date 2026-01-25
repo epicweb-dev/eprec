@@ -43,8 +43,9 @@ Remix components work differently from React. Here's how:
 
 #### All Components Receive a Handle
 
-**All components** receive a `Handle` as their first argument and return a render
-function that receives props. Even if you don't need the handle, you must accept it:
+**All components** receive a `Handle` as their first argument and return a
+render function that receives props. Even if you don't need the handle, you must
+accept it:
 
 ```tsx
 import type { Handle } from 'remix/component'
@@ -89,9 +90,9 @@ function Counter(handle: Handle) {
 
 #### Components with Setup Props and Regular Props
 
-Components have two phases: **setup** (runs once) and **render** (runs on updates).
-The second parameter is the **setup prop** (for initialization), and the returned
-function receives **regular props** (for rendering):
+Components have two phases: **setup** (runs once) and **render** (runs on
+updates). The second parameter is the **setup prop** (for initialization), and
+the returned function receives **regular props** (for rendering):
 
 > **⚠️ Important:** Always use the props from the render function to get the
 > latest values. The setup prop is captured once at setup time and may be stale.
@@ -118,7 +119,9 @@ function UserCard(
 	// Regular props - always has the latest values on each render
 	return (props: { userId: string; label?: string }) => (
 		<div>
-			<h2>{props.label || 'User'}: {props.userId}</h2>
+			<h2>
+				{props.label || 'User'}: {props.userId}
+			</h2>
 			{loading ? <span>Loading...</span> : <span>{user?.name}</span>}
 		</div>
 	)
