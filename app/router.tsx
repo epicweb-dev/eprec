@@ -76,6 +76,7 @@ const cacheControl =
 export function createAppRouter(rootDir: string) {
 	const router = createRouter({
 		middleware: [
+			bunStaticFiles(path.join(rootDir, 'fixtures'), { cacheControl }),
 			bunStaticFiles(path.join(rootDir, 'public'), { cacheControl }),
 			bunStaticFiles(path.join(rootDir, 'app'), {
 				filter: (pathname) => pathname.startsWith('assets/'),
