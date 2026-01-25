@@ -46,6 +46,17 @@ bun process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
   --write-logs
 ```
 
+## Web UI (experimental)
+
+Start the Remix-powered UI shell with the CLI:
+
+```bash
+bun cli.ts app start
+```
+
+Then open `http://127.0.0.1:3000`. Use `--port` or `--host` to override the
+defaults.
+
 ## CLI Options
 
 | Option                   | Alias | Description                             | Default     |

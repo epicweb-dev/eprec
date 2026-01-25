@@ -8,6 +8,7 @@
     "url": "https://github.com/epicweb-dev/eprec"
   },
   "scripts": {
+    "app:start": "bun ./app-server.ts",
     "format": "prettier --write .",
     "test": "bun test process-course utils.test.ts",
     "test:e2e": "bun test e2e",
@@ -18,9 +19,13 @@
     "eprec": "./cli.ts"
   },
   "files": [
+    "app/**",
+    "app-server.ts",
     "cli.ts",
     "process-course/**",
     "process-course-video.ts",
+    "public/**",
+    "server/**",
     "speech-detection.ts",
     "utils.ts",
     "whispercpp-transcribe.ts"
@@ -36,7 +41,9 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "get-port": "^7.1.0",
     "onnxruntime-node": "^1.23.2",
+    "remix": "3.0.0-alpha.0",
     "yargs": "^18.0.0"
   }
 }
