@@ -7,6 +7,7 @@ import {
 	type CutRange,
 	type TranscriptWord,
 } from './edit-session-data.ts'
+import { StyleSystemSample } from '../components/style-system-sample.tsx'
 
 const MIN_CUT_LENGTH = 0.2
 const DEFAULT_CUT_LENGTH = 2.4
@@ -193,6 +194,8 @@ export function EditingWorkspace(handle: Handle) {
 						the final CLI export in one place.
 					</p>
 				</header>
+
+				<StyleSystemSample />
 
 				<section class="app-card app-card--full">
 					<h2>Session summary</h2>
