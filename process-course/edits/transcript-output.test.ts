@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test'
-import type { TranscriptSegment } from '../../whispercpp-transcribe'
+import type { TranscriptSegment } from '../../src/whispercpp-transcribe'
 import {
 	buildTranscriptWordsWithIndices,
 	generateTranscriptJson,

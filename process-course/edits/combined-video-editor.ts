@@ -4,9 +4,9 @@ import { copyFile, mkdir, mkdtemp, rename, rm } from 'node:fs/promises'
 import {
 	detectSpeechBounds,
 	checkSegmentHasSpeech,
-} from '../../speech-detection'
+} from '../../src/speech-detection'
 import { extractChapterSegmentAccurate, concatSegments } from '../ffmpeg'
-import { clamp, getMediaDurationSeconds } from '../../utils'
+import { clamp, getMediaDurationSeconds } from '../../src/utils'
 import { EDIT_CONFIG } from '../config'
 import { editVideo } from './video-editor'
 import {

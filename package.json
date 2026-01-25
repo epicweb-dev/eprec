@@ -8,28 +8,23 @@
     "url": "https://github.com/epicweb-dev/eprec"
   },
   "scripts": {
-    "app:start": "bun --watch ./cli.ts app start",
+    "app:start": "bun --watch ./src/cli.ts app start",
     "format": "prettier --write .",
-    "test": "bun test process-course utils.test.ts",
+    "test": "bun test process-course src/utils.test.ts",
     "test:e2e": "bun test ./e2e",
-    "test:smoke": "bunx playwright test -c playwright-smoke-config.ts",
+    "test:smoke": "bunx playwright test -c playwright/playwright-smoke-config.ts",
     "test:all": "bun test '**/*.test.ts'",
     "validate": "bun run test"
   },
   "bin": {
-    "eprec": "./cli.ts"
+    "eprec": "./src/cli.ts"
   },
   "files": [
     "app/**",
-    "app-server.ts",
-    "cli.ts",
     "process-course/**",
-    "process-course-video.ts",
     "public/**",
     "server/**",
-    "speech-detection.ts",
-    "utils.ts",
-    "whispercpp-transcribe.ts"
+    "src/**"
   ],
   "prettier": "@epic-web/config/prettier",
   "devDependencies": {

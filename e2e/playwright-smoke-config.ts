@@ -17,7 +17,7 @@ export default defineConfig({
 		browserName: 'chromium',
 	},
 	webServer: {
-		command: 'bun ./app-server.ts',
+		command: 'bun ./src/app-server.ts',
 		url: baseURL,
 		reuseExistingServer: !process.env.CI,
 		timeout: 60_000,

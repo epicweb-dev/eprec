@@ -1,6 +1,6 @@
 import { readAudioSamples } from '../ffmpeg'
 import { CONFIG, EDIT_CONFIG } from '../config'
-import { clamp } from '../../utils'
+import { clamp } from '../../src/utils'
 import { mergeTimeRanges } from '../utils/time-ranges'
 import { findLowestAmplitudeBoundaryProgressive } from '../utils/audio-analysis'
 import type { TimeRange } from '../types'

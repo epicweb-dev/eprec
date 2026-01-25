@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test'
 import { scaleTranscriptSegments, extractTranscriptCommands } from './parser'
-import type { TranscriptSegment } from '../../whispercpp-transcribe'
+import type { TranscriptSegment } from '../../src/whispercpp-transcribe'
 
 // Factory functions for test data
 function createSegment(

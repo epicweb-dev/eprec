@@ -4,20 +4,20 @@ import type { Arguments, CommandBuilder, CommandHandler } from 'yargs'
 import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
 import { startAppServer } from './app-server'
-import { setLogHooks } from './process-course/logging'
-import { ensureFfmpegAvailable } from './process-course/ffmpeg'
+import { setLogHooks } from '../process-course/logging'
+import { ensureFfmpegAvailable } from '../process-course/ffmpeg'
 import {
 	VIDEO_EXTENSIONS,
 	normalizeProcessArgs,
 	configureProcessCommand,
-} from './process-course/cli'
+} from '../process-course/cli'
 import { runProcessCourse } from './process-course-video'
 import {
 	configureEditVideoCommand,
 	configureCombineVideosCommand,
 	createCombineVideosHandler,
 	createEditVideoHandler,
-} from './process-course/edits/cli'
+} from '../process-course/edits/cli'
 import { detectSpeechSegmentsForFile } from './speech-detection'
 import {
 	getDefaultWhisperModelPath,
@@ -34,7 +34,7 @@ import {
 	type PathPicker,
 	type Prompter,
 	withSpinner,
-} from './cli-ux'
+} from '../cli-ux'
 
 type CliUxContext = {
 	interactive: boolean

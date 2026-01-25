@@ -1,9 +1,9 @@
-import { clamp } from '../../utils'
-import { detectSpeechSegmentsWithVad } from '../../speech-detection'
+import { clamp } from '../../src/utils'
+import { detectSpeechSegmentsWithVad } from '../../src/speech-detection'
 import { readAudioSamples } from '../ffmpeg'
 import { CONFIG } from '../config'
 import { logInfo } from '../logging'
-import { formatSeconds } from '../../utils'
+import { formatSeconds } from '../../src/utils'
 import { mergeTimeRanges } from '../utils/time-ranges'
 import {
 	buildSilenceGapsFromSpeech,

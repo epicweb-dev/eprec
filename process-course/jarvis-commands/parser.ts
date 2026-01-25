@@ -1,4 +1,4 @@
-import type { TranscriptSegment } from '../../whispercpp-transcribe'
+import type { TranscriptSegment } from '../../src/whispercpp-transcribe'
 import { CONFIG } from '../config'
 import type { TimeRange } from '../types'
 import { normalizeWords } from '../utils/transcript'

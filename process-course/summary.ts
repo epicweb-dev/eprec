@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { formatSeconds } from '../utils'
+import { formatSeconds } from '../src/utils'
 import {
 	buildSummaryLogPath,
 	buildJarvisWarningLogPath,

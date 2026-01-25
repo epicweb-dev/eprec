@@ -1,7 +1,7 @@
 import path from 'node:path'
-import { detectSpeechBounds, checkSegmentHasSpeech } from '../speech-detection'
-import { transcribeAudio } from '../whispercpp-transcribe'
-import { clamp, formatSeconds } from '../utils'
+import { detectSpeechBounds, checkSegmentHasSpeech } from '../src/speech-detection'
+import { transcribeAudio } from '../src/whispercpp-transcribe'
+import { clamp, formatSeconds } from '../src/utils'
 import {
 	COMMAND_CLOSE_WORD,
 	COMMAND_WAKE_WORD,

@@ -7,7 +7,7 @@ import {
 	normalizeWords,
 } from './transcript'
 import { TRANSCRIPTION_PHRASES } from '../config'
-import type { TranscriptSegment } from '../../whispercpp-transcribe'
+import type { TranscriptSegment } from '../../src/whispercpp-transcribe'
 
 function createPhrases(...phrases: string[]): string[] {
 	return phrases

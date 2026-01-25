@@ -1,23 +1,23 @@
 #!/usr/bin/env bun
 import path from 'node:path'
 import { mkdir } from 'node:fs/promises'
-import { ensureFfmpegAvailable, getChapters } from './process-course/ffmpeg'
-import { logInfo } from './process-course/logging'
-import { parseCliArgs, type CliArgs } from './process-course/cli'
-import { resolveChapterSelection } from './process-course/utils/chapter-selection'
-import { removeDirIfEmpty } from './process-course/utils/file-utils'
-import { writeJarvisLogs, writeSummaryLogs } from './process-course/summary'
+import { ensureFfmpegAvailable, getChapters } from '../process-course/ffmpeg'
+import { logInfo } from '../process-course/logging'
+import { parseCliArgs, type CliArgs } from '../process-course/cli'
+import { resolveChapterSelection } from '../process-course/utils/chapter-selection'
+import { removeDirIfEmpty } from '../process-course/utils/file-utils'
+import { writeJarvisLogs, writeSummaryLogs } from '../process-course/summary'
 import {
 	processChapter,
 	type ChapterProcessingOptions,
-} from './process-course/chapter-processor'
+} from '../process-course/chapter-processor'
 import type {
 	JarvisEdit,
 	JarvisNote,
 	JarvisWarning,
 	ProcessedChapterInfo,
 	EditWorkspaceInfo,
-} from './process-course/types'
+} from '../process-course/types'
 import { formatSeconds } from './utils'
 import { checkSegmentHasSpeech } from './speech-detection'
 
@@ -103,7 +103,7 @@ async function processInputFile(options: {
 	dryRun: boolean
 	keepIntermediates: boolean
 	writeLogs: boolean
-	chapterSelection: import('./process-course/types').ChapterSelection | null
+	chapterSelection: import('../process-course/types').ChapterSelection | null
 	enableTranscription: boolean
 	whisperModelPath: string
 	whisperLanguage: string
