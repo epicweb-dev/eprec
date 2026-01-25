@@ -1,0 +1,35 @@
+name: playwright-smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v5
+
+      - name: ⎔ Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 📥 Download deps
+        run: bun install
+        env:
+          HUSKY_SKIP_INSTALL: true
+
+      - name: 🎭 Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+
+      - name: 🧪 Run Playwright smoke test
+        run: bun run test:smoke
