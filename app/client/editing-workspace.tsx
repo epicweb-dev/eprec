@@ -145,7 +145,8 @@ export function EditingWorkspace(handle: Handle) {
 		const selectedRange = selectedRangeId
 			? sortedCuts.find((range) => range.id === selectedRangeId) ?? null
 			: null
-		const totalRemoved = sortedCuts.reduce(
+		const mergedCuts = mergeOverlappingRanges(sortedCuts)
+		const totalRemoved = mergedCuts.reduce(
 			(total, range) => total + (range.end - range.start),
 			0,
 		)
@@ -696,6 +697,22 @@ export function EditingWorkspace(handle: Handle) {
 
 function sortRanges(ranges: CutRange[]) {
 	return ranges.slice().sort((a, b) => a.start - b.start)
+}
+
+function mergeOverlappingRanges(ranges: CutRange[]) {
+	if (ranges.length === 0) return []
+	const sorted = sortRanges(ranges)
+	const merged: CutRange[] = [{ ...sorted[0] }]
+	for (let i = 1; i < sorted.length; i++) {
+		const current = sorted[i]
+		const last = merged[merged.length - 1]
+		if (current.start <= last.end) {
+			last.end = Math.max(last.end, current.end)
+		} else {
+			merged.push({ ...current })
+		}
+	}
+	return merged
 }
 
 function normalizeRange(range: CutRange, duration: number) {
