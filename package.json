@@ -11,7 +11,7 @@
     "app:start": "bun ./app-server.ts",
     "format": "prettier --write .",
     "test": "bun test process-course utils.test.ts",
-    "test:e2e": "bun test e2e",
+    "test:e2e": "bun test ./e2e",
     "test:smoke": "bunx playwright test -c playwright-smoke-config.ts",
     "test:all": "bun test '**/*.test.ts'",
     "validate": "bun run test"
