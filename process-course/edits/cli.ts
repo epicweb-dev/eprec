@@ -186,16 +186,17 @@ export function createEditVideoHandler(options: CliUxOptions): CommandHandler {
 				if (!result.success) {
 					throw new Error(result.error ?? 'Edit failed.')
 				}
-				console.log(`Edited video written to ${args.output}`)
 			},
 			{ successText: 'Edit complete' },
 		)
+		console.log(`Edited video written to ${args.output}`)
 	}
 }
 
 export function createCombineVideosHandler(options: CliUxOptions): CommandHandler {
 	return async (argv) => {
 		const args = await resolveCombineVideosArgs(argv, options)
+		let outputPath = ''
 		await withSpinner(
 			'Combining videos',
 			async () => {
@@ -212,10 +213,11 @@ export function createCombineVideosHandler(options: CliUxOptions): CommandHandle
 				if (!result.success) {
 					throw new Error(result.error ?? 'Combine failed.')
 				}
-				console.log(`Combined video written to ${result.outputPath}`)
+				outputPath = result.outputPath
 			},
 			{ successText: 'Combine complete' },
 		)
+		console.log(`Combined video written to ${outputPath}`)
 	}
 }
 
