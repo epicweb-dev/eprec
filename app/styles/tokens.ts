@@ -92,5 +92,5 @@ export const breakpoints = {
 export const mq = {
 	mobile: `@media (max-width: ${breakpoints.mobile})`,
 	tablet: `@media (max-width: ${breakpoints.tablet})`,
-	desktop: `@media (min-width: 1025px)`,
+	desktop: `@media (min-width: ${parseInt(breakpoints.tablet) + 1}px)`,
 } as const
