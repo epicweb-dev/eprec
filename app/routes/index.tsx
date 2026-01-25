@@ -1,4 +1,3 @@
-import type { Action } from 'remix/fetch-router'
 import { html } from 'remix/html-template'
 import { Layout } from '../components/layout.tsx'
 import routes from '../config/routes.ts'
@@ -6,7 +5,7 @@ import { render } from '../helpers/render.ts'
 
 const indexHandler = {
 	middleware: [],
-	action() {
+	loader() {
 		return render(
 			Layout({
 				title: 'Eprec Studio',
@@ -49,7 +48,4 @@ const indexHandler = {
 	},
 }
 
-export default indexHandler satisfies Action<
-	typeof routes.index.method,
-	typeof routes.index.pattern.source
->
+export default indexHandler

@@ -100,7 +100,3 @@ export function createAppRouter(rootDir: string) {
 
 	return router
 }
-
-const router = createAppRouter(import.meta.dirname)
-
-export default router

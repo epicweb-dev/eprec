@@ -2,8 +2,8 @@ import type { Handle } from 'remix/component'
 
 type CounterSetup = { initial?: number }
 
-export function Counter(handle: Handle, setup: CounterSetup = {}) {
-	let count = setup.initial ?? 0
+export function Counter(handle: Handle, props: { setup?: CounterSetup } = {}) {
+	let count = props.setup?.initial ?? 0
 	return () => (
 		<button
 			type="button"
