@@ -41,7 +41,11 @@ export function EditingWorkspace(handle: Handle) {
 
 	const addManualCut = () => {
 		const start = clamp(playhead, 0, duration - MIN_CUT_LENGTH)
-		const end = clamp(start + DEFAULT_CUT_LENGTH, start + MIN_CUT_LENGTH, duration)
+		const end = clamp(
+			start + DEFAULT_CUT_LENGTH,
+			start + MIN_CUT_LENGTH,
+			duration,
+		)
 		const newRange: CutRange = {
 			id: `manual-${manualCutId++}`,
 			start,
@@ -130,10 +134,19 @@ export function EditingWorkspace(handle: Handle) {
 	}
 
 	const syncVideoToPlayhead = (value: number) => {
-		if (!previewNode || !previewReady || duration <= 0 || previewDuration <= 0) {
+		if (
+			!previewNode ||
+			!previewReady ||
+			duration <= 0 ||
+			previewDuration <= 0
+		) {
 			return
 		}
-		const targetTime = clamp((value / duration) * previewDuration, 0, previewDuration)
+		const targetTime = clamp(
+			(value / duration) * previewDuration,
+			0,
+			previewDuration,
+		)
 		lastSyncedPlayhead = value
 		if (Math.abs(previewNode.currentTime - targetTime) > 0.05) {
 			previewNode.currentTime = targetTime
@@ -143,7 +156,7 @@ export function EditingWorkspace(handle: Handle) {
 	return () => {
 		const sortedCuts = sortRanges(cutRanges)
 		const selectedRange = selectedRangeId
-			? sortedCuts.find((range) => range.id === selectedRangeId) ?? null
+			? (sortedCuts.find((range) => range.id === selectedRangeId) ?? null)
 			: null
 		const mergedCuts = mergeOverlappingRanges(sortedCuts)
 		const totalRemoved = mergedCuts.reduce(
@@ -161,7 +174,10 @@ export function EditingWorkspace(handle: Handle) {
 					.filter((word) => word.word.toLowerCase().includes(query))
 					.slice(0, 12)
 			: []
-		const commandPreview = buildCommandPreview(sampleEditSession.sourceName, chapters)
+		const commandPreview = buildCommandPreview(
+			sampleEditSession.sourceName,
+			chapters,
+		)
 		const previewTime =
 			previewReady && previewDuration > 0
 				? (playhead / duration) * previewDuration
@@ -190,29 +206,29 @@ export function EditingWorkspace(handle: Handle) {
 						</div>
 						<div class="summary-item">
 							<span class="summary-label">Cuts</span>
-							<span class="summary-value">
-								{sortedCuts.length} ranges
-							</span>
+							<span class="summary-value">{sortedCuts.length} ranges</span>
 							<span class="summary-subtext">
 								{formatSeconds(totalRemoved)} removed
 							</span>
 						</div>
 						<div class="summary-item">
 							<span class="summary-label">Output length</span>
-							<span class="summary-value">{formatTimestamp(finalDuration)}</span>
+							<span class="summary-value">
+								{formatTimestamp(finalDuration)}
+							</span>
 							<span class="summary-subtext">
 								{Math.round((finalDuration / duration) * 100)}% retained
 							</span>
 						</div>
 						<div class="summary-item">
 							<span class="summary-label">Commands</span>
-							<span class="summary-value">
-								{commands.length} detected
-							</span>
+							<span class="summary-value">{commands.length} detected</span>
 							<span class="summary-subtext">
-								{commands.filter((command) =>
-									isCommandApplied(command, sortedCuts, chapters),
-								).length}{' '}
+								{
+									commands.filter((command) =>
+										isCommandApplied(command, sortedCuts, chapters),
+									).length
+								}{' '}
 								applied
 							</span>
 						</div>
@@ -228,7 +244,11 @@ export function EditingWorkspace(handle: Handle) {
 								trims.
 							</p>
 						</div>
-						<button class="button button--primary" type="button" on={{ click: addManualCut }}>
+						<button
+							class="button button--primary"
+							type="button"
+							on={{ click: addManualCut }}
+						>
 							Add cut at playhead
 						</button>
 					</div>
@@ -260,11 +280,11 @@ export function EditingWorkspace(handle: Handle) {
 											: 'Loading'}
 									</span>
 								</div>
-							<video
-								class="timeline-video-player"
-								src="/e2e-test.mp4"
-								controls
-								preload="metadata"
+								<video
+									class="timeline-video-player"
+									src="/e2e-test.mp4"
+									controls
+									preload="metadata"
 									connect={(node: HTMLVideoElement, signal) => {
 										previewNode = node
 										const handleLoadedMetadata = () => {
@@ -294,7 +314,10 @@ export function EditingWorkspace(handle: Handle) {
 											previewPlaying = false
 											handle.update()
 										}
-										node.addEventListener('loadedmetadata', handleLoadedMetadata)
+										node.addEventListener(
+											'loadedmetadata',
+											handleLoadedMetadata,
+										)
 										node.addEventListener('timeupdate', handleTimeUpdate)
 										node.addEventListener('play', handlePlay)
 										node.addEventListener('pause', handlePause)
@@ -313,9 +336,7 @@ export function EditingWorkspace(handle: Handle) {
 									}}
 								/>
 								<div class="timeline-video-meta">
-									<span>
-										Preview {formatTimestamp(previewTime)}
-									</span>
+									<span>Preview {formatTimestamp(previewTime)}</span>
 									<span class="app-muted">
 										Timeline {formatTimestamp(playhead)}
 									</span>
@@ -350,9 +371,7 @@ export function EditingWorkspace(handle: Handle) {
 							<div class="timeline-controls">
 								<label class="control-label">
 									Playhead
-									<span class="control-value">
-										{formatTimestamp(playhead)}
-									</span>
+									<span class="control-value">{formatTimestamp(playhead)}</span>
 								</label>
 								<input
 									class="timeline-slider"
@@ -385,7 +404,9 @@ export function EditingWorkspace(handle: Handle) {
 									type="button"
 									on={{
 										click: () => {
-											const next = sortedCuts.find((range) => range.start > playhead)
+											const next = sortedCuts.find(
+												(range) => range.start > playhead,
+											)
 											if (next) setPlayhead(next.start)
 										},
 									}}
@@ -460,7 +481,9 @@ export function EditingWorkspace(handle: Handle) {
 											on={{
 												input: (event) => {
 													const target = event.currentTarget as HTMLInputElement
-													updateCutRange(selectedRange.id, { reason: target.value })
+													updateCutRange(selectedRange.id, {
+														reason: target.value,
+													})
 												},
 											}}
 										/>
@@ -562,7 +585,8 @@ export function EditingWorkspace(handle: Handle) {
 											value={chapter.status}
 											on={{
 												change: (event) => {
-													const target = event.currentTarget as HTMLSelectElement
+													const target =
+														event.currentTarget as HTMLSelectElement
 													updateChapterStatus(
 														chapter.id,
 														target.value as ChapterStatus,
