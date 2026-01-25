@@ -41,20 +41,28 @@ Do not introduce React, Preact, or any other UI framework.
 
 Remix components work differently from React. Here's how:
 
-#### Stateless Components
+#### All Components Receive a Handle
 
-For simple components with no state, return a render function:
+**All components** receive a `Handle` as their first argument and return a render
+function that receives props. Even if you don't need the handle, you must accept it:
 
 ```tsx
-function Greeting() {
-	return ({ name }: { name: string }) => <div>Hello, {name}!</div>
+import type { Handle } from 'remix/component'
+
+// Simple component that doesn't use the handle
+function Greeting(handle: Handle) {
+	return (props: { name: string }) => <div>Hello, {props.name}!</div>
+}
+
+// Component that doesn't take props at all
+function SimpleComponent(handle: Handle) {
+	return () => <div>Hello, world!</div>
 }
 ```
 
 #### Stateful Components
 
-For components that need state, use `handle: Handle` and **return a function**
-that returns JSX. The closure above the return acts as your state container:
+For components that need state, use the closure above the return to store state:
 
 ```tsx
 import type { Handle } from 'remix/component'
@@ -79,27 +87,27 @@ function Counter(handle: Handle) {
 }
 ```
 
-#### Components with Props and State
+#### Components with Setup Props and Regular Props
 
-When a component has both props and state, use **setupProps** for initial setup
-and **renderProps** for rendering:
+Components have two phases: **setup** (runs once) and **render** (runs on updates).
+The second parameter is the **setup prop** (for initialization), and the returned
+function receives **regular props** (for rendering):
 
-> **⚠️ Important:** Always use `renderProps` inside the render function to get
-> the latest prop values. The `setupProps` are captured once at setup time and
-> may be stale.
+> **⚠️ Important:** Always use the props from the render function to get the
+> latest values. The setup prop is captured once at setup time and may be stale.
 
 ```tsx
 import type { Handle } from 'remix/component'
 
 function UserCard(
 	handle: Handle,
-	setupProps: { userId: string }, // Captured once at setup
+	setup: { userId: string }, // Setup prop - runs once for initialization
 ) {
 	let user: User | null = null
 	let loading = true
 
-	// Use setupProps for initial data fetching
-	fetch(`/api/users/${setupProps.userId}`)
+	// Use setup prop for initial data fetching
+	fetch(`/api/users/${setup.userId}`)
 		.then((res) => res.json())
 		.then((data) => {
 			user = data
@@ -107,10 +115,10 @@ function UserCard(
 			handle.update()
 		})
 
-	// renderProps always has the latest values
-	return (renderProps: { userId: string }) => (
+	// Regular props - always has the latest values on each render
+	return (props: { userId: string; label?: string }) => (
 		<div>
-			<h2>User: {renderProps.userId}</h2>
+			<h2>{props.label || 'User'}: {props.userId}</h2>
 			{loading ? <span>Loading...</span> : <span>{user?.name}</span>}
 		</div>
 	)
