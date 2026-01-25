@@ -22,9 +22,15 @@ export function EditingWorkspace(handle: Handle) {
 	let selectedRangeId = cutRanges[0]?.id ?? null
 	let searchQuery = ''
 	let manualCutId = 1
+	let previewDuration = 0
+	let previewReady = false
+	let previewPlaying = false
+	let previewNode: HTMLVideoElement | null = null
+	let lastSyncedPlayhead = playhead
 
 	const setPlayhead = (value: number) => {
 		playhead = clamp(value, 0, duration)
+		syncVideoToPlayhead(playhead)
 		handle.update()
 	}
 
@@ -123,6 +129,17 @@ export function EditingWorkspace(handle: Handle) {
 		handle.update()
 	}
 
+	const syncVideoToPlayhead = (value: number) => {
+		if (!previewNode || !previewReady || duration <= 0 || previewDuration <= 0) {
+			return
+		}
+		const targetTime = clamp((value / duration) * previewDuration, 0, previewDuration)
+		lastSyncedPlayhead = value
+		if (Math.abs(previewNode.currentTime - targetTime) > 0.05) {
+			previewNode.currentTime = targetTime
+		}
+	}
+
 	return () => {
 		const sortedCuts = sortRanges(cutRanges)
 		const selectedRange = selectedRangeId
@@ -144,6 +161,10 @@ export function EditingWorkspace(handle: Handle) {
 					.slice(0, 12)
 			: []
 		const commandPreview = buildCommandPreview(sampleEditSession.sourceName, chapters)
+		const previewTime =
+			previewReady && previewDuration > 0
+				? (playhead / duration) * previewDuration
+				: 0
 
 		return (
 			<main class="app-shell">
@@ -213,6 +234,92 @@ export function EditingWorkspace(handle: Handle) {
 
 					<div class="timeline-layout">
 						<div class="timeline-preview">
+							<div class="timeline-video">
+								<div class="timeline-video-header">
+									<div>
+										<span class="summary-label">Preview video</span>
+										<span class="summary-subtext">
+											Scrub the timeline or play to sync the preview.
+										</span>
+									</div>
+									<span
+										class={classNames(
+											'status-pill',
+											previewReady
+												? previewPlaying
+													? 'status-pill--info'
+													: 'status-pill--success'
+												: 'status-pill--warning',
+										)}
+									>
+										{previewReady
+											? previewPlaying
+												? 'Playing'
+												: 'Ready'
+											: 'Loading'}
+									</span>
+								</div>
+								<video
+									class="timeline-video-player"
+									src="/fixtures/e2e-test.mp4"
+									controls
+									preload="metadata"
+									connect={(node: HTMLVideoElement, signal) => {
+										previewNode = node
+										const handleLoadedMetadata = () => {
+											const nextDuration = Number(node.duration)
+											previewDuration = Number.isFinite(nextDuration)
+												? nextDuration
+												: 0
+											previewReady = previewDuration > 0
+											syncVideoToPlayhead(playhead)
+											handle.update()
+										}
+										const handleTimeUpdate = () => {
+											if (!previewReady || previewDuration <= 0) return
+											const mapped =
+												(node.currentTime / previewDuration) * duration
+											if (Math.abs(mapped - lastSyncedPlayhead) <= 0.05) {
+												return
+											}
+											playhead = clamp(mapped, 0, duration)
+											handle.update()
+										}
+										const handlePlay = () => {
+											previewPlaying = true
+											handle.update()
+										}
+										const handlePause = () => {
+											previewPlaying = false
+											handle.update()
+										}
+										node.addEventListener('loadedmetadata', handleLoadedMetadata)
+										node.addEventListener('timeupdate', handleTimeUpdate)
+										node.addEventListener('play', handlePlay)
+										node.addEventListener('pause', handlePause)
+										signal.addEventListener('abort', () => {
+											node.removeEventListener(
+												'loadedmetadata',
+												handleLoadedMetadata,
+											)
+											node.removeEventListener('timeupdate', handleTimeUpdate)
+											node.removeEventListener('play', handlePlay)
+											node.removeEventListener('pause', handlePause)
+											if (previewNode === node) {
+												previewNode = null
+											}
+										})
+									}}
+								/>
+								<div class="timeline-video-meta">
+									<span>
+										Preview {formatTimestamp(previewTime)}
+									</span>
+									<span class="app-muted">
+										Timeline {formatTimestamp(playhead)}
+									</span>
+								</div>
+							</div>
 							<div
 								class="timeline-track"
 								style={`--playhead:${(playhead / duration) * 100}%`}

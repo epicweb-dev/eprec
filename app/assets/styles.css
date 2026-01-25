@@ -196,6 +196,38 @@ p {
 	gap: 12px;
 }
 
+.timeline-video {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px;
+	border-radius: 16px;
+	border: 1px solid #e2e8f0;
+	background: #ffffff;
+}
+
+.timeline-video-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.timeline-video-player {
+	width: 100%;
+	border-radius: 12px;
+	background: #0f172a;
+	aspect-ratio: 16 / 9;
+}
+
+.timeline-video-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	font-size: 12px;
+	color: #64748b;
+}
+
 .timeline-track {
 	position: relative;
 	height: 72px;
