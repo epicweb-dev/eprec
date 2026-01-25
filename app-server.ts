@@ -11,6 +11,24 @@ type AppServerOptions = {
 }
 
 const LOCALHOST_ALIASES = new Set(['127.0.0.1', '::1', 'localhost'])
+const COLOR_ENABLED =
+	process.env.FORCE_COLOR === '1' ||
+	(Boolean(process.stdout.isTTY) && !process.env.NO_COLOR)
+const SHORTCUT_COLORS: Record<string, string> = {
+	o: '\u001b[36m',
+	r: '\u001b[33m',
+	q: '\u001b[31m',
+	h: '\u001b[35m',
+}
+const ANSI_RESET = '\u001b[0m'
+
+function colorizeShortcut(key: string) {
+	if (!COLOR_ENABLED) {
+		return key
+	}
+	const color = SHORTCUT_COLORS[key.toLowerCase()]
+	return color ? `${color}${key}${ANSI_RESET}` : key
+}
 
 function formatHostnameForDisplay(hostname: string) {
 	if (LOCALHOST_ALIASES.has(hostname)) {
@@ -29,10 +47,10 @@ function formatServerUrl(hostname: string, port: number) {
 function getShortcutLines(url: string) {
 	return [
 		'[app] shortcuts:',
-		`  o: open ${url} in browser`,
-		'  r: restart server',
-		'  q: quit server',
-		'  h: show shortcuts',
+		`  ${colorizeShortcut('o')}: open ${url} in browser`,
+		`  ${colorizeShortcut('r')}: restart server`,
+		`  ${colorizeShortcut('q')}: quit server`,
+		`  ${colorizeShortcut('h')}: show shortcuts`,
 	]
 }
 
