@@ -5,7 +5,8 @@ const port = Number(process.env.SMOKE_PORT ?? 3000)
 const baseURL = `http://${host}:${port}`
 
 export default defineConfig({
-	testDir: 'e2e/playwright',
+	testDir: '.',
+	testMatch: '**/playwright-smoke.spec.ts',
 	timeout: 30_000,
 	expect: {
 		timeout: 5_000,
