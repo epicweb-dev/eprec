@@ -183,6 +183,7 @@ export async function startAppServer(options: AppServerOptions = {}) {
 	let server = startServer(port, host)
 	const getUrl = () => formatServerUrl(server.hostname, server.port)
 	let cleanupInput = () => {}
+	let isRestarting = false
 	const stopServer = () => {
 		console.log('[app] stopping server...')
 		cleanupInput()
@@ -190,10 +191,15 @@ export async function startAppServer(options: AppServerOptions = {}) {
 		process.exit(0)
 	}
 	const restartServer = async () => {
+		if (isRestarting) {
+			return
+		}
+		isRestarting = true
 		console.log('[app] restarting server...')
 		await server.stop()
 		server = startServer(port, host)
 		console.log(`[app] running at ${getUrl()}`)
+		isRestarting = false
 	}
 	cleanupInput = setupShortcutHandling({
 		getUrl,
@@ -205,7 +211,14 @@ export async function startAppServer(options: AppServerOptions = {}) {
 	console.log(`[app] running at ${url}`)
 	logShortcuts(url)
 
-	return { server, url }
+	return { 
+		server, 
+		url,
+		stop: () => {
+			cleanupInput()
+			server.stop()
+		}
+	}
 }
 
 if (import.meta.main) {
