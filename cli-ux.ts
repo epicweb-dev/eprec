@@ -18,7 +18,10 @@ export type Prompter = {
 			validate?: (value: string) => true | string | Promise<true | string>
 		},
 	): Promise<string>
-	confirm(message: string, options?: { defaultValue?: boolean }): Promise<boolean>
+	confirm(
+		message: string,
+		options?: { defaultValue?: boolean },
+	): Promise<boolean>
 }
 
 export type PathPicker = {
@@ -293,7 +296,8 @@ async function promptForManualPath(
 	currentDir: string,
 ) {
 	const manual = await prompter.input('Enter path manually', {
-		validate: async (value) => validateManualPath(value, options.kind, currentDir),
+		validate: async (value) =>
+			validateManualPath(value, options.kind, currentDir),
 	})
 	const resolved = resolveManualPath(manual.trim(), currentDir)
 	return resolved
@@ -373,9 +377,7 @@ function matchesExtensions(name: string, extensions?: string[]) {
 		return true
 	}
 	const lower = name.toLowerCase()
-	return extensions.some((extension) =>
-		lower.endsWith(extension.toLowerCase()),
-	)
+	return extensions.some((extension) => lower.endsWith(extension.toLowerCase()))
 }
 
 async function listEntries(currentDir: string) {

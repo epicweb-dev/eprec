@@ -164,14 +164,15 @@ async function main(rawArgs = hideBin(process.argv)) {
 						})
 						resultText = result.text
 					},
-					{ successText: 'Transcription complete', enabled: context.interactive },
+					{
+						successText: 'Transcription complete',
+						enabled: context.interactive,
+					},
 				)
 				console.log(
 					`Transcript written to ${transcribeArgs.outputBasePath}.txt`,
 				)
-				console.log(
-					`Segments written to ${transcribeArgs.outputBasePath}.json`,
-				)
+				console.log(`Segments written to ${transcribeArgs.outputBasePath}.json`)
 				console.log(resultText)
 			},
 		)
@@ -208,7 +209,10 @@ async function main(rawArgs = hideBin(process.argv)) {
 							end,
 						})
 					},
-					{ successText: 'Speech detection complete', enabled: context.interactive },
+					{
+						successText: 'Speech detection complete',
+						enabled: context.interactive,
+					},
 				)
 				console.log(JSON.stringify(segments, null, 2))
 			},
@@ -230,9 +234,7 @@ function createCliUxContext(): CliUxContext {
 	return { interactive, prompter, pathPicker }
 }
 
-async function promptForCommand(
-	prompter: Prompter,
-): Promise<string[] | null> {
+async function promptForCommand(prompter: Prompter): Promise<string[] | null> {
 	const selection = await prompter.select('Choose a command', [
 		{
 			name: 'Process chapters into separate files',
@@ -283,7 +285,12 @@ async function resolveProcessArgs(argv: Arguments, context: CliUxContext) {
 	}
 
 	let outputDir = resolveOptionalString(argv['output-dir'])
-	if (!outputDir && context.interactive && context.prompter && context.pathPicker) {
+	if (
+		!outputDir &&
+		context.interactive &&
+		context.prompter &&
+		context.pathPicker
+	) {
 		const chooseOutput = await context.prompter.confirm(
 			'Choose a custom output directory?',
 			{ defaultValue: false },

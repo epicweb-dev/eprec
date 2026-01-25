@@ -40,7 +40,10 @@ type CliUxOptions = {
 	pathPicker?: PathPicker
 }
 
-export function buildCombinedOutputPath(video1Path: string, video2Path: string) {
+export function buildCombinedOutputPath(
+	video1Path: string,
+	video2Path: string,
+) {
 	const dir = path.dirname(video1Path)
 	const ext = path.extname(video1Path) || path.extname(video2Path) || '.mp4'
 	const name1 = path.parse(video1Path).name
@@ -81,8 +84,7 @@ export async function resolveEditVideoArgs(
 		})
 	}
 	const defaultOutputPath = buildEditedOutputPath(input)
-	const outputPath =
-		resolveOptionalString(argv.output) ?? defaultOutputPath
+	const outputPath = resolveOptionalString(argv.output) ?? defaultOutputPath
 	const paddingMs = resolvePaddingMs(argv['padding-ms'])
 
 	return {
@@ -194,7 +196,9 @@ export function createEditVideoHandler(options: CliUxOptions): CommandHandler {
 	}
 }
 
-export function createCombineVideosHandler(options: CliUxOptions): CommandHandler {
+export function createCombineVideosHandler(
+	options: CliUxOptions,
+): CommandHandler {
 	return async (argv) => {
 		const args = await resolveCombineVideosArgs(argv, options)
 		let outputPath = ''
