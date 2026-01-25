@@ -1,3 +1,4 @@
+import type { Handle } from 'remix/component'
 import {
 	colors,
 	mq,
@@ -93,7 +94,7 @@ const swatchStyle = (color: string) => ({
 	boxShadow: `0 0 0 1px ${colors.border}`,
 })
 
-export function StyleSystemSample() {
+export function StyleSystemSample(handle: Handle) {
 	return () => (
 		<section css={sectionStyle}>
 			<header css={headerStyle}>
