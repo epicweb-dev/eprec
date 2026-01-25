@@ -1,9 +1,10 @@
-import './app/config/init-env.ts'
+import path from 'node:path'
+import '../app/config/init-env.ts'
 
 import getPort from 'get-port'
-import { getEnv } from './app/config/env.ts'
-import { createAppRouter } from './app/router.tsx'
-import { createBundlingRoutes } from './server/bundling.ts'
+import { getEnv } from '../app/config/env.ts'
+import { createAppRouter } from '../app/router.tsx'
+import { createBundlingRoutes } from '../server/bundling.ts'
 
 type AppServerOptions = {
 	host?: string
@@ -21,6 +22,7 @@ const SHORTCUT_COLORS: Record<string, string> = {
 	h: '\u001b[35m',
 }
 const ANSI_RESET = '\u001b[0m'
+const APP_ROOT = path.resolve(import.meta.dirname, '..')
 
 function colorizeShortcut(key: string) {
 	if (!COLOR_ENABLED) {
@@ -145,12 +147,12 @@ function setupShortcutHandling(options: {
 }
 
 function startServer(port: number, hostname: string) {
-	const router = createAppRouter(import.meta.dirname)
+	const router = createAppRouter(APP_ROOT)
 	return Bun.serve({
 		port,
 		hostname,
 		idleTimeout: 30,
-		routes: createBundlingRoutes(import.meta.dirname),
+		routes: createBundlingRoutes(APP_ROOT),
 		async fetch(request) {
 			try {
 				return await router.fetch(request)

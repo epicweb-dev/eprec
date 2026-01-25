@@ -5,7 +5,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
 import { extractTranscriptionAudio } from '../ffmpeg'
-import { transcribeAudio } from '../../whispercpp-transcribe'
+import { transcribeAudio } from '../../src/whispercpp-transcribe'
 import { scaleTranscriptSegments } from '../jarvis-commands/parser'
 import { EDIT_CONFIG } from '../config'
 import {
@@ -13,7 +13,7 @@ import {
 	generateTranscriptJson,
 	generateTranscriptText,
 } from './transcript-output'
-import { getMediaDurationSeconds } from '../../utils'
+import { getMediaDurationSeconds } from '../../src/utils'
 
 async function main() {
 	const argv = yargs(hideBin(process.argv))

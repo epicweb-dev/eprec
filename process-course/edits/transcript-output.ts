@@ -1,4 +1,4 @@
-import type { TranscriptSegment } from '../../whispercpp-transcribe'
+import type { TranscriptSegment } from '../../src/whispercpp-transcribe'
 import { buildTranscriptWords } from '../jarvis-commands/parser'
 import type { TranscriptJson, TranscriptWordWithIndex } from './types'
 

@@ -70,7 +70,7 @@ The default small English model is downloaded on first use and cached at
 `--whisper-model-path`) to use a different model.
 
 Enable transcription with `--enable-transcription` when running
-`process-course-video.ts` to skip chapters that include "jarvis bad take" or
+`src/process-course-video.ts` to skip chapters that include "jarvis bad take" or
 "bad take jarvis". If the CLI isn't on your PATH, pass `--whisper-binary-path`
 with the full path to `whisper-cli`.
 
@@ -87,15 +87,15 @@ Manual test checklist:
 
 | File                        | Description                                                       |
 | --------------------------- | ----------------------------------------------------------------- |
-| `process-course-video.ts`   | Main CLI entry point                                              |
+| `src/process-course-video.ts` | Main CLI entry point                                            |
 | `process-course/config.ts`  | Shared constants and tuning parameters                            |
 | `process-course/logging.ts` | CLI logging helpers                                               |
 | `process-course/paths.ts`   | Output/intermediate path helpers                                  |
 | `process-course/types.ts`   | Shared types used by the CLI                                      |
 | `process-course/utils.ts`   | Transcript parsing, time range, audio analysis, and CLI utilities |
-| `speech-detection.ts`       | Silero VAD integration                                            |
-| `whispercpp-transcribe.ts`  | Whisper.cpp integration                                           |
-| `utils.ts`                  | Shared utilities                                                  |
+| `src/speech-detection.ts`       | Silero VAD integration                                        |
+| `src/whispercpp-transcribe.ts`  | Whisper.cpp integration                                       |
+| `src/utils.ts`                  | Shared utilities                                              |
 
 # eprec
 
@@ -119,7 +119,7 @@ audio-based silence detection.
 
 ```bash
 bun install
-bun process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
+bun src/process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
   --enable-transcription \
   --keep-intermediates \
   --write-logs
@@ -245,12 +245,12 @@ Models are automatically downloaded and cached:
 
 | File                        | Description                                                       |
 | --------------------------- | ----------------------------------------------------------------- |
-| `process-course-video.ts`   | Main CLI entry point                                              |
+| `src/process-course-video.ts` | Main CLI entry point                                            |
 | `process-course/config.ts`  | Shared constants and tuning parameters                            |
 | `process-course/logging.ts` | CLI logging helpers                                               |
 | `process-course/paths.ts`   | Output/intermediate path helpers                                  |
 | `process-course/types.ts`   | Shared types used by the CLI                                      |
 | `process-course/utils.ts`   | Transcript parsing, time range, audio analysis, and CLI utilities |
-| `speech-detection.ts`       | Silero VAD integration                                            |
-| `whispercpp-transcribe.ts`  | Whisper.cpp integration                                           |
-| `utils.ts`                  | Shared utilities                                                  |
+| `src/speech-detection.ts`       | Silero VAD integration                                        |
+| `src/whispercpp-transcribe.ts`  | Whisper.cpp integration                                       |
+| `src/utils.ts`                  | Shared utilities                                              |

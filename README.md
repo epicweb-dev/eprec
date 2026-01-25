@@ -40,7 +40,7 @@ bun install
 ## Quick Start
 
 ```bash
-bun process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
+bun src/process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
   --enable-transcription \
   --keep-intermediates \
   --write-logs

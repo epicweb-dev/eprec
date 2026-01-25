@@ -9,9 +9,9 @@ import {
 } from '../process-course/paths'
 import { extractTranscriptionAudio } from '../process-course/ffmpeg'
 import { transcriptIncludesWord } from '../process-course/utils/transcript'
-import { transcribeAudio } from '../whispercpp-transcribe'
-import { runCommand, getMediaDurationSeconds } from '../utils'
-import { detectSpeechBounds } from '../speech-detection'
+import { transcribeAudio } from '../src/whispercpp-transcribe'
+import { runCommand, getMediaDurationSeconds } from '../src/utils'
+import { detectSpeechBounds } from '../src/speech-detection'
 import { CONFIG, EDIT_CONFIG } from '../process-course/config'
 
 const TEST_OUTPUT_DIR = path.join(process.cwd(), '.test-output', 'e2e-test')
@@ -140,7 +140,7 @@ beforeAll(async () => {
 
 	// Run the full pipeline
 	const result =
-		await $`bun cli.ts process ${FIXTURE_PATH} ${TEST_OUTPUT_DIR} --min-chapter-seconds 2 -k`.quiet()
+		await $`bun src/cli.ts process ${FIXTURE_PATH} ${TEST_OUTPUT_DIR} --min-chapter-seconds 2 -k`.quiet()
 
 	if (result.exitCode !== 0) {
 		console.error('Pipeline failed:', result.stderr.toString())
@@ -355,7 +355,7 @@ test("e2e edit workflow removes word 'manual' from chapter 4", async () => {
 	await Bun.write(tempEditedPath, editedText)
 
 	const result =
-		await $`bun cli.ts edit --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`.quiet()
+		await $`bun src/cli.ts edit --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`.quiet()
 	expect(result.exitCode).toBe(0)
 
 	const editedExists = await fileExists(editedOutputPath)
@@ -493,7 +493,7 @@ test('e2e combine edit errors on word modification (chicken test)', async () => 
 	await Bun.write(tempEditedPath, editedText)
 
 	const result =
-		await $`bun cli.ts edit --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`
+		await $`bun src/cli.ts edit --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`
 			.quiet()
 			.nothrow()
 	expect(result.exitCode).not.toBe(0)
@@ -532,7 +532,7 @@ test('e2e combine edit removes a unique word successfully', async () => {
 	await Bun.write(tempEditedPath, editedText)
 
 	const result =
-		await $`bun cli.ts edit --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`.quiet()
+		await $`bun src/cli.ts edit --input ${originalVideoPath} --transcript ${transcriptJsonPath} --edited ${tempEditedPath} --output ${editedOutputPath}`.quiet()
 	expect(result.exitCode).toBe(0)
 
 	const editedExists = await fileExists(editedOutputPath)

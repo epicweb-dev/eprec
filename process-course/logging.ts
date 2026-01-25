@@ -1,4 +1,4 @@
-import { formatCommand } from '../utils'
+import { formatCommand } from '../src/utils'
 import { buildChapterLogPath } from './paths'
 
 type LogHook = () => void

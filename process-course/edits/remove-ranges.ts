@@ -6,7 +6,7 @@ import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
 import { extractChapterSegmentAccurate, concatSegments } from '../ffmpeg'
 import { buildKeepRanges, mergeTimeRanges } from '../utils/time-ranges'
-import { clamp, getMediaDurationSeconds } from '../../utils'
+import { clamp, getMediaDurationSeconds } from '../../src/utils'
 import type { TimeRange } from '../types'
 
 export type RemoveRangesOptions = {

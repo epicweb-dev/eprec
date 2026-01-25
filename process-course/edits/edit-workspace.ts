@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { copyFile, mkdir } from 'node:fs/promises'
-import type { TranscriptSegment } from '../../whispercpp-transcribe'
+import type { TranscriptSegment } from '../../src/whispercpp-transcribe'
 import {
 	buildTranscriptWordsWithIndices,
 	generateTranscriptJson,

@@ -1,4 +1,4 @@
-import type { TranscriptSegment } from '../../whispercpp-transcribe'
+import type { TranscriptSegment } from '../../src/whispercpp-transcribe'
 import type { TimeRange } from '../types'
 import { TRANSCRIPTION_PHRASES } from '../config'
 import { buildTranscriptWords } from '../jarvis-commands/parser'

@@ -2,7 +2,7 @@ import {
 	runCommand as runCommandBase,
 	runCommandBinary as runCommandBinaryBase,
 	formatSeconds,
-} from '../utils'
+} from '../src/utils'
 import { CONFIG, TRANSCRIPTION_SAMPLE_RATE } from './config'
 import { logCommand, logInfo, logWarn } from './logging'
 import type { Chapter, LoudnormAnalysis } from './types'

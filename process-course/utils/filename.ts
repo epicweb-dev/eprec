@@ -1,5 +1,5 @@
 import type { Chapter } from '../types'
-import { normalizeFilename, toKebabCase } from '../../utils'
+import { normalizeFilename, toKebabCase } from '../../src/utils'
 
 /**
  * Format a chapter into a filename-safe string.
