@@ -214,13 +214,15 @@ export async function startAppServer(options: AppServerOptions = {}) {
 	console.log(`[app] running at ${url}`)
 	logShortcuts(url)
 
-	return { 
-		get server() { return server }, 
+	return {
+		get server() {
+			return server
+		},
 		url,
 		stop: () => {
 			cleanupInput()
 			server.stop()
-		}
+		},
 	}
 }
 
