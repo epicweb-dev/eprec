@@ -34,7 +34,9 @@ async function getServerPort(nodeEnv: string, desiredPort: number) {
 	}
 	const port = await getPort({ port: desiredPort })
 	if (port !== desiredPort) {
-		console.warn(`⚠️  Port ${desiredPort} was taken, using port ${port} instead`)
+		console.warn(
+			`⚠️  Port ${desiredPort} was taken, using port ${port} instead`,
+		)
 	}
 	return port
 }

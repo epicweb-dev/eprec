@@ -88,8 +88,8 @@ export function createAppRouter(rootDir: string) {
 					title: 'Not Found',
 					entryScript: false,
 					children: html`<main class="app-shell">
-					<h1 class="app-title">404 - Not Found</h1>
-				</main>`,
+						<h1 class="app-title">404 - Not Found</h1>
+					</main>`,
 				}),
 				{ status: 404 },
 			)

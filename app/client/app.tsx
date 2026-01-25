@@ -22,9 +22,7 @@ export function App() {
 				<section class="app-card">
 					<h2>UI status</h2>
 					<p class="status-pill">Running locally</p>
-					<p class="app-muted">
-						Server-rendered shell with client-side edits.
-					</p>
+					<p class="app-muted">Server-rendered shell with client-side edits.</p>
 				</section>
 				<section class="app-card">
 					<h2>Interaction check</h2>

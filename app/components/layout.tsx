@@ -27,11 +27,9 @@ export function Layout({
 		</head>
 		<body>
 			<div id="root">${children ?? ''}</div>
-			${
-				entryScript
-					? html`<script type="module" src="${entryScript}"></script>`
-					: ''
-			}
+			${entryScript
+				? html`<script type="module" src="${entryScript}"></script>`
+				: ''}
 		</body>
 	</html>`
 }
