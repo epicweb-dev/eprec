@@ -8,6 +8,16 @@ import { normalizeSkipPhrases } from './utils/transcript'
 import { parseChapterSelection } from './utils/chapter-selection'
 import type { ChapterSelection } from './types'
 
+export const VIDEO_EXTENSIONS = [
+	'.mp4',
+	'.mkv',
+	'.avi',
+	'.mov',
+	'.webm',
+	'.flv',
+	'.m4v',
+]
+
 export interface CliArgs {
 	inputPaths: string[]
 	outputDir: string | null
@@ -118,16 +128,7 @@ export function normalizeProcessArgs(
 	if (!outputDir && inputPaths.length > 0) {
 		const outputCandidate = inputPaths.at(-1)
 		if (outputCandidate !== undefined) {
-			const videoExtensions = [
-				'.mp4',
-				'.mkv',
-				'.avi',
-				'.mov',
-				'.webm',
-				'.flv',
-				'.m4v',
-			]
-			const hasVideoExtension = videoExtensions.some((ext) =>
+			const hasVideoExtension = VIDEO_EXTENSIONS.some((ext) =>
 				outputCandidate.toLowerCase().endsWith(ext),
 			)
 
