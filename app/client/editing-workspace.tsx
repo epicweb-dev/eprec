@@ -260,11 +260,11 @@ export function EditingWorkspace(handle: Handle) {
 											: 'Loading'}
 									</span>
 								</div>
-								<video
-									class="timeline-video-player"
-									src="/fixtures/e2e-test.mp4"
-									controls
-									preload="metadata"
+							<video
+								class="timeline-video-player"
+								src="/e2e-test.mp4"
+								controls
+								preload="metadata"
 									connect={(node: HTMLVideoElement, signal) => {
 										previewNode = node
 										const handleLoadedMetadata = () => {
