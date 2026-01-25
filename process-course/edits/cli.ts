@@ -141,13 +141,14 @@ export async function resolveCombineVideosArgs(
 
 	let output = resolveOptionalString(argv.output)
 	if (!output) {
-		if (!options.interactive || !pathPicker) {
-			throw new Error('Output video path is required.')
+		if (options.interactive && pathPicker) {
+			output = await pathPicker.pickOutputPath({
+				message: 'Select output video path',
+				defaultPath: buildCombinedOutputPath(video1, video2),
+			})
+		} else {
+			output = buildCombinedOutputPath(video1, video2)
 		}
-		output = await pathPicker.pickOutputPath({
-			message: 'Select output video path',
-			defaultPath: buildCombinedOutputPath(video1, video2),
-		})
 	}
 	const paddingMs = resolvePaddingMs(argv['padding-ms'])
 
