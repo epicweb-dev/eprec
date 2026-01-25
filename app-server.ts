@@ -189,9 +189,9 @@ export async function startAppServer(options: AppServerOptions = {}) {
 		server.stop()
 		process.exit(0)
 	}
-	const restartServer = () => {
+	const restartServer = async () => {
 		console.log('[app] restarting server...')
-		server.stop()
+		await server.stop()
 		server = startServer(port, host)
 		console.log(`[app] running at ${getUrl()}`)
 	}
