@@ -110,6 +110,12 @@
 		--color-danger-text: #fecaca;
 		--color-danger-border: #ef4444;
 		--color-danger-border-strong: #fca5a5;
+		--shadow-sm: 0 1px 2px
+			color-mix(in srgb, #0f172a 12%, transparent);
+		--shadow-md: 0 6px 16px
+			color-mix(in srgb, #0f172a 14%, transparent);
+		--shadow-lg: 0 18px 38px
+			color-mix(in srgb, #0f172a 16%, transparent);
 	}
 }
 

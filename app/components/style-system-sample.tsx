@@ -78,7 +78,7 @@ const primaryButtonStyle = {
 
 const pillStyle = {
 	padding: `${spacing.xs} ${spacing.sm}`,
-	borderRadius: radius.xl,
+	borderRadius: radius.pill,
 	backgroundColor: colors.infoSurface,
 	color: colors.infoText,
 	fontSize: typography.fontSize.xs,

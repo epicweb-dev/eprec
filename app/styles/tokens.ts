@@ -64,6 +64,7 @@ export const radius = {
 	md: 'var(--radius-md)',
 	lg: 'var(--radius-lg)',
 	xl: 'var(--radius-xl)',
+	pill: 'var(--radius-pill)',
 } as const
 
 export const shadows = {
@@ -91,5 +92,5 @@ export const breakpoints = {
 export const mq = {
 	mobile: `@media (max-width: ${breakpoints.mobile})`,
 	tablet: `@media (max-width: ${breakpoints.tablet})`,
-	desktop: `@media (min-width: ${breakpoints.tablet})`,
+	desktop: `@media (min-width: 1025px)`,
 } as const
