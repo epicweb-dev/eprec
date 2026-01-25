@@ -310,6 +310,7 @@ export function EditingWorkspace(handle: Handle) {
 										const handleTimeUpdate = () => {
 											if (!previewReady || previewDuration <= 0) return
 											if (isScrubbing) return
+											if (!previewPlaying) return
 											const mapped =
 												(node.currentTime / previewDuration) * duration
 											if (Math.abs(mapped - lastSyncedPlayhead) <= 0.05) {
