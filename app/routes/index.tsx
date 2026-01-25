@@ -13,34 +13,37 @@ const indexHandler = {
 						<span class="app-kicker">Eprec Studio</span>
 						<h1 class="app-title">Editing workspace</h1>
 						<p class="app-subtitle">
-							Prepare edits with the CLI, then review them here.
+							Review transcript-based edits, refine cut ranges, and prepare
+							exports.
 						</p>
 					</header>
-					<div class="app-grid">
+					<section class="app-card app-card--full">
+						<h2>Timeline editor</h2>
+						<p class="app-muted">
+							Loading timeline controls and cut ranges.
+						</p>
+						<div class="timeline-track timeline-track--skeleton"></div>
+					</section>
+					<div class="app-grid app-grid--two">
 						<section class="app-card">
-							<h2>Workflow</h2>
-							<ol class="app-list">
-								<li>Run a CLI edit command.</li>
-								<li>Open the workspace UI.</li>
-								<li>Review and refine the cut list.</li>
-							</ol>
-						</section>
-						<section class="app-card">
-							<h2>UI status</h2>
-							<p class="status-pill">UI booted</p>
+							<h2>Chapter plan</h2>
 							<p class="app-muted">
-								Client-side components load after the first paint.
+								Output names and skip flags appear after the client boots.
 							</p>
 						</section>
 						<section class="app-card">
-							<h2>Interaction check</h2>
-							<p class="app-muted">Client bundle loads after this page.</p>
-							<button class="counter-button" type="button" disabled>
-								<span>Click count</span>
-								<span class="counter-value">0</span>
-							</button>
+							<h2>Command windows</h2>
+							<p class="app-muted">
+								Jarvis command detection will populate this panel.
+							</p>
 						</section>
 					</div>
+					<section class="app-card app-card--full">
+						<h2>Transcript search</h2>
+						<p class="app-muted">
+							Search and jump controls will load in the interactive UI.
+						</p>
+					</section>
 				</main>`,
 			}),
 		)
