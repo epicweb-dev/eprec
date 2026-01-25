@@ -195,11 +195,14 @@ export async function startAppServer(options: AppServerOptions = {}) {
 			return
 		}
 		isRestarting = true
-		console.log('[app] restarting server...')
-		await server.stop()
-		server = startServer(port, host)
-		console.log(`[app] running at ${getUrl()}`)
-		isRestarting = false
+		try {
+			console.log('[app] restarting server...')
+			await server.stop()
+			server = startServer(port, host)
+			console.log(`[app] running at ${getUrl()}`)
+		} finally {
+			isRestarting = false
+		}
 	}
 	cleanupInput = setupShortcutHandling({
 		getUrl,
@@ -212,7 +215,7 @@ export async function startAppServer(options: AppServerOptions = {}) {
 	logShortcuts(url)
 
 	return { 
-		server, 
+		get server() { return server }, 
 		url,
 		stop: () => {
 			cleanupInput()
