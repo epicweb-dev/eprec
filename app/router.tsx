@@ -96,7 +96,10 @@ export function createAppRouter(rootDir: string) {
 		},
 	})
 
-	router.map(routes.index, indexHandlers)
+	router.map(routes.index, {
+		middleware: indexHandlers.middleware,
+		action: indexHandlers.loader,
+	})
 
 	return router
 }

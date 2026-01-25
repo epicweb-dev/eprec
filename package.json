@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "test": "bun test process-course utils.test.ts",
     "test:e2e": "bun test e2e",
-    "test:all": "bun test",
+    "test:smoke": "bunx playwright test -c playwright-smoke-config.ts",
+    "test:all": "bun test '**/*.test.ts'",
     "validate": "bun run test"
   },
   "bin": {
@@ -33,6 +34,7 @@
   "prettier": "@epic-web/config/prettier",
   "devDependencies": {
     "@epic-web/config": "^1.21.3",
+    "@playwright/test": "^1.58.0",
     "@types/bun": "latest",
     "@types/yargs": "^17.0.35",
     "prettier": "^3.8.1"
