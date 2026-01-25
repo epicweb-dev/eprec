@@ -85,17 +85,17 @@ Manual test checklist:
 
 ## Source Files
 
-| File                        | Description                                                       |
-| --------------------------- | ----------------------------------------------------------------- |
-| `src/process-course-video.ts` | Main CLI entry point                                            |
-| `process-course/config.ts`  | Shared constants and tuning parameters                            |
-| `process-course/logging.ts` | CLI logging helpers                                               |
-| `process-course/paths.ts`   | Output/intermediate path helpers                                  |
-| `process-course/types.ts`   | Shared types used by the CLI                                      |
-| `process-course/utils.ts`   | Transcript parsing, time range, audio analysis, and CLI utilities |
-| `src/speech-detection.ts`       | Silero VAD integration                                        |
-| `src/whispercpp-transcribe.ts`  | Whisper.cpp integration                                       |
-| `src/utils.ts`                  | Shared utilities                                              |
+| File                           | Description                                                       |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `src/process-course-video.ts`  | Main CLI entry point                                              |
+| `process-course/config.ts`     | Shared constants and tuning parameters                            |
+| `process-course/logging.ts`    | CLI logging helpers                                               |
+| `process-course/paths.ts`      | Output/intermediate path helpers                                  |
+| `process-course/types.ts`      | Shared types used by the CLI                                      |
+| `process-course/utils.ts`      | Transcript parsing, time range, audio analysis, and CLI utilities |
+| `src/speech-detection.ts`      | Silero VAD integration                                            |
+| `src/whispercpp-transcribe.ts` | Whisper.cpp integration                                           |
+| `src/utils.ts`                 | Shared utilities                                                  |
 
 # eprec
 
@@ -243,14 +243,14 @@ Models are automatically downloaded and cached:
 
 ## Source Files
 
-| File                        | Description                                                       |
-| --------------------------- | ----------------------------------------------------------------- |
-| `src/process-course-video.ts` | Main CLI entry point                                            |
-| `process-course/config.ts`  | Shared constants and tuning parameters                            |
-| `process-course/logging.ts` | CLI logging helpers                                               |
-| `process-course/paths.ts`   | Output/intermediate path helpers                                  |
-| `process-course/types.ts`   | Shared types used by the CLI                                      |
-| `process-course/utils.ts`   | Transcript parsing, time range, audio analysis, and CLI utilities |
-| `src/speech-detection.ts`       | Silero VAD integration                                        |
-| `src/whispercpp-transcribe.ts`  | Whisper.cpp integration                                       |
-| `src/utils.ts`                  | Shared utilities                                              |
+| File                           | Description                                                       |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `src/process-course-video.ts`  | Main CLI entry point                                              |
+| `process-course/config.ts`     | Shared constants and tuning parameters                            |
+| `process-course/logging.ts`    | CLI logging helpers                                               |
+| `process-course/paths.ts`      | Output/intermediate path helpers                                  |
+| `process-course/types.ts`      | Shared types used by the CLI                                      |
+| `process-course/utils.ts`      | Transcript parsing, time range, audio analysis, and CLI utilities |
+| `src/speech-detection.ts`      | Silero VAD integration                                            |
+| `src/whispercpp-transcribe.ts` | Whisper.cpp integration                                           |
+| `src/utils.ts`                 | Shared utilities                                                  |
