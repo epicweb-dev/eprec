@@ -20,7 +20,7 @@ const indexHandler = {
 					<section class="app-card app-card--full">
 						<h2>Timeline editor</h2>
 						<p class="app-muted">
-							Loading timeline controls and cut ranges.
+							Loading preview video, timeline controls, and cut ranges.
 						</p>
 						<div class="timeline-track timeline-track--skeleton"></div>
 					</section>
