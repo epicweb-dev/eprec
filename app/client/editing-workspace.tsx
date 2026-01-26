@@ -824,7 +824,7 @@ function buildCommandPreview(sourceName: string, chapters: ChapterPlan[]) {
 		chapters.find((chapter) => chapter.status !== 'skipped')?.outputName ??
 		'edited-output.mp4'
 	return [
-		'bun process-course/edits/cli.ts edit-video \\',
+		'eprec edit \\',
 		`  --input "${sourceName}" \\`,
 		'  --transcript "transcript.json" \\',
 		'  --edited "transcript.txt" \\',

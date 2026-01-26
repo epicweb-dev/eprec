@@ -76,7 +76,7 @@ function buildInstructions(options: {
 		'1) Edit `transcript.txt` and delete whole words only.',
 		'2) Run:',
 		'',
-		`   bun process-course/edits/cli.ts edit-video \\`,
+		`   eprec edit \\`,
 		`     --input "${options.originalVideoPath}" \\`,
 		`     --transcript "${options.transcriptJsonPath}" \\`,
 		`     --edited "${options.transcriptTextPath}" \\`,
