@@ -198,11 +198,42 @@ export function EditingWorkspace(handle: Handle) {
 		})
 	}
 
+	const loadQueueSnapshot = async () => {
+		await requestQueue('', { method: 'GET' })
+	}
+
+	const connectQueueStream = () => {
+		if (typeof window === 'undefined') return
+		const stream = new EventSource(QUEUE_STREAM_URL)
+		const updateStatus = () => {
+			queueStreamStatus =
+				stream.readyState === EventSource.OPEN
+					? 'open'
+					: stream.readyState === EventSource.CONNECTING
+						? 'connecting'
+						: 'error'
+			handle.update()
+		}
+		stream.addEventListener('open', updateStatus)
+		stream.addEventListener('error', updateStatus)
+		stream.addEventListener('snapshot', (event) => {
+			try {
+				const snapshot = JSON.parse(
+					(event as MessageEvent<string>).data,
+				) as ProcessingQueueSnapshot
+				applyQueueSnapshot(snapshot)
+			} catch (error) {
+				setQueueError('Unable to parse queue updates.')
+			}
+		})
+		handle.signal.addEventListener('abort', () => {
+			stream.close()
+		})
+	}
+
 	if (initialVideoPath) {
 		void loadVideoFromPath(initialVideoPath)
 	}
-	void loadQueueSnapshot()
-	connectQueueStream()
 
 	const setPlayhead = (value: number) => {
 		playhead = clamp(value, 0, duration)
@@ -378,38 +409,8 @@ export function EditingWorkspace(handle: Handle) {
 		}
 	}
 
-	const loadQueueSnapshot = async () => {
-		await requestQueue('', { method: 'GET' })
-	}
-
-	const connectQueueStream = () => {
-		if (typeof window === 'undefined') return
-		const stream = new EventSource(QUEUE_STREAM_URL)
-		const updateStatus = () => {
-			queueStreamStatus =
-				stream.readyState === EventSource.OPEN
-					? 'open'
-					: stream.readyState === EventSource.CONNECTING
-						? 'connecting'
-						: 'error'
-			handle.update()
-		}
-		stream.addEventListener('open', updateStatus)
-		stream.addEventListener('error', updateStatus)
-		stream.addEventListener('snapshot', (event) => {
-			try {
-				const snapshot = JSON.parse(
-					(event as MessageEvent<string>).data,
-				) as ProcessingQueueSnapshot
-				applyQueueSnapshot(snapshot)
-			} catch (error) {
-				setQueueError('Unable to parse queue updates.')
-			}
-		})
-		handle.signal.addEventListener('abort', () => {
-			stream.close()
-		})
-	}
+	void loadQueueSnapshot()
+	connectQueueStream()
 
 	const queueTask = (
 		action: ProcessingAction,
