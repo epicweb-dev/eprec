@@ -171,8 +171,7 @@ export function EditingWorkspace(handle: Handle) {
 		primaryChapterId = chapterId
 		if (secondaryChapterId === chapterId) {
 			secondaryChapterId =
-				chapters.find((chapter) => chapter.id !== chapterId)?.id ??
-				chapterId
+				chapters.find((chapter) => chapter.id !== chapterId)?.id ?? chapterId
 		}
 		handle.update()
 	}
@@ -405,8 +404,8 @@ export function EditingWorkspace(handle: Handle) {
 						<div>
 							<h2>Processing actions</h2>
 							<p class="app-muted">
-								Queue chapter edits, transcript cleanup, and export jobs directly
-								from the workspace.
+								Queue chapter edits, transcript cleanup, and export jobs
+								directly from the workspace.
 							</p>
 						</div>
 						<div class="actions-meta">

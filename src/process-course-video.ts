@@ -108,7 +108,10 @@ function buildProgressText(params: {
 function createSpinnerProgressReporter(context: SpinnerProgressContext) {
 	const chapterCount = Math.max(1, context.chapterCount)
 	return {
-		createChapterProgress({ chapterIndex, chapterTitle }: ChapterProgressContext) {
+		createChapterProgress({
+			chapterIndex,
+			chapterTitle,
+		}: ChapterProgressContext) {
 			let stepIndex = 0
 			let stepCount = 1
 			let stepLabel = 'Starting'
