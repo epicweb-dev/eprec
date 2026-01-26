@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import path from 'node:path'
-import type { Arguments, CommandBuilder, CommandHandler } from 'yargs'
+import type { Argv, Arguments, CommandBuilder, CommandHandler } from 'yargs'
 import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
 import { startAppServer } from './app-server'
@@ -28,6 +28,7 @@ import {
 	createInquirerPrompter,
 	createPathPicker,
 	createStepProgressReporter,
+	handlePromptFailure,
 	isInteractive,
 	pauseActiveSpinner,
 	resumeActiveSpinner,
@@ -249,6 +250,8 @@ async function main(rawArgs = hideBin(process.argv)) {
 		)
 		.demandCommand(1)
 		.strict()
+		.fail(handlePromptFailure)
+		.exitProcess(false)
 		.help()
 
 	await parser.parseAsync()

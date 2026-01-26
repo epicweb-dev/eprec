@@ -54,6 +54,55 @@ export class PromptCancelled extends Error {
 	}
 }
 
+export function handlePromptFailure(
+	message: string | null | undefined,
+	error: Error | undefined,
+	parser: { showHelp: () => void },
+) {
+	if (error instanceof PromptCancelled) {
+		throw error
+	}
+	parser.showHelp()
+	if (message) {
+		throw new Error(message)
+	}
+	if (error) {
+		throw error
+	}
+	throw new Error('Unknown error')
+}
+
+function isExitPromptError(error: unknown) {
+	if (error instanceof Error) {
+		return (
+			error.name === 'ExitPromptError' ||
+			error.message.includes('User force closed the prompt')
+		)
+	}
+	if (error && typeof error === 'object' && 'name' in error) {
+		return (error as { name?: unknown }).name === 'ExitPromptError'
+	}
+	return false
+}
+
+function handlePromptError(error: unknown): never {
+	if (error instanceof PromptCancelled) {
+		throw error
+	}
+	if (isExitPromptError(error)) {
+		throw new PromptCancelled()
+	}
+	throw error
+}
+
+async function runPrompt<T>(action: () => Promise<T>): Promise<T> {
+	try {
+		return await action()
+	} catch (error) {
+		return handlePromptError(error)
+	}
+}
+
 export function resolveOptionalString(value: unknown) {
 	if (typeof value !== 'string') {
 		return undefined
@@ -201,22 +250,25 @@ export async function withSpinner<T>(
 export function createInquirerPrompter(): Prompter {
 	return {
 		async select<T>(message: string, choices: PromptChoice<T>[]) {
-			const { result } = await inquirer.prompt<{ result: T }>([
-				{
-					type: 'list',
-					name: 'result',
-					message,
-					choices,
-				},
-			])
-			return result
+			return runPrompt(async () => {
+				const { result } = await inquirer.prompt<{ result: T }>([
+					{
+						type: 'list',
+						name: 'result',
+						message,
+						choices,
+					},
+				])
+				return result
+			})
 		},
 		async search<T>(message: string, choices: PromptChoice<T>[]) {
-			const result = await searchPrompt<T>({
-				message,
-				source: async (input) => filterPromptChoices(choices, input),
-			})
-			return result
+			return runPrompt(() =>
+				searchPrompt<T>({
+					message,
+					source: async (input) => filterPromptChoices(choices, input),
+				}),
+			)
 		},
 		async input(
 			message: string,
@@ -225,27 +277,31 @@ export function createInquirerPrompter(): Prompter {
 				validate?: (value: string) => true | string | Promise<true | string>
 			},
 		) {
-			const { result } = await inquirer.prompt<{ result: string }>([
-				{
-					type: 'input',
-					name: 'result',
-					message,
-					default: options?.defaultValue,
-					validate: options?.validate,
-				},
-			])
-			return result
+			return runPrompt(async () => {
+				const { result } = await inquirer.prompt<{ result: string }>([
+					{
+						type: 'input',
+						name: 'result',
+						message,
+						default: options?.defaultValue,
+						validate: options?.validate,
+					},
+				])
+				return result
+			})
 		},
 		async confirm(message: string, options?: { defaultValue?: boolean }) {
-			const { result } = await inquirer.prompt<{ result: boolean }>([
-				{
-					type: 'confirm',
-					name: 'result',
-					message,
-					default: options?.defaultValue ?? false,
-				},
-			])
-			return result
+			return runPrompt(async () => {
+				const { result } = await inquirer.prompt<{ result: boolean }>([
+					{
+						type: 'confirm',
+						name: 'result',
+						message,
+						default: options?.defaultValue ?? false,
+					},
+				])
+				return result
+			})
 		},
 	}
 }

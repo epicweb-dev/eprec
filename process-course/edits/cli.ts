@@ -8,6 +8,7 @@ import {
 	createInquirerPrompter,
 	createPathPicker,
 	createStepProgressReporter,
+	handlePromptFailure,
 	isInteractive,
 	pauseActiveSpinner,
 	resolveOptionalString,
@@ -373,6 +374,8 @@ export async function runEditsCli(rawArgs = hideBin(process.argv)) {
 		)
 		.demandCommand(1)
 		.strict()
+		.fail(handlePromptFailure)
+		.exitProcess(false)
 		.help()
 
 	await parser.parseAsync()
