@@ -44,6 +44,24 @@ type CliUxOptions = {
 	pathPicker?: PathPicker
 }
 
+function handlePromptFailure(
+	message: string | null | undefined,
+	error: Error | undefined,
+	parser: Argv,
+) {
+	if (error instanceof PromptCancelled) {
+		throw error
+	}
+	parser.showHelp()
+	if (message) {
+		throw new Error(message)
+	}
+	if (error) {
+		throw error
+	}
+	throw new Error('Unknown error')
+}
+
 export function buildCombinedOutputPath(
 	video1Path: string,
 	video2Path: string,
@@ -373,6 +391,8 @@ export async function runEditsCli(rawArgs = hideBin(process.argv)) {
 		)
 		.demandCommand(1)
 		.strict()
+		.fail(handlePromptFailure)
+		.exitProcess(false)
 		.help()
 
 	await parser.parseAsync()

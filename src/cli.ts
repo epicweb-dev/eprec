@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import path from 'node:path'
-import type { Arguments, CommandBuilder, CommandHandler } from 'yargs'
+import type { Argv, Arguments, CommandBuilder, CommandHandler } from 'yargs'
 import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
 import { startAppServer } from './app-server'
@@ -41,6 +41,24 @@ type CliUxContext = {
 	interactive: boolean
 	prompter?: Prompter
 	pathPicker?: PathPicker
+}
+
+function handlePromptFailure(
+	message: string | null | undefined,
+	error: Error | undefined,
+	parser: Argv,
+) {
+	if (error instanceof PromptCancelled) {
+		throw error
+	}
+	parser.showHelp()
+	if (message) {
+		throw new Error(message)
+	}
+	if (error) {
+		throw error
+	}
+	throw new Error('Unknown error')
 }
 
 async function main(rawArgs = hideBin(process.argv)) {
@@ -249,6 +267,8 @@ async function main(rawArgs = hideBin(process.argv)) {
 		)
 		.demandCommand(1)
 		.strict()
+		.fail(handlePromptFailure)
+		.exitProcess(false)
 		.help()
 
 	await parser.parseAsync()
