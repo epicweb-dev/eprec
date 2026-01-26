@@ -324,7 +324,7 @@ export function EditingWorkspace(handle: Handle) {
 		const query = searchQuery.trim()
 		const searchResults = query
 			? matchSorter(transcriptIndex, query, {
-					keys: ['word', 'context'],
+					keys: ['word'],
 				}).slice(0, 12)
 			: []
 		const queuedCount = processingQueue.filter(
