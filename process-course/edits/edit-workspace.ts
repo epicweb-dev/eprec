@@ -70,6 +70,7 @@ function buildInstructions(options: {
 	transcriptTextPath: string
 	outputBasename: string
 }): string {
+	const outputPath = path.join(options.editsDirectory, options.outputBasename)
 	return [
 		'# Manual edit workflow',
 		'',
@@ -77,14 +78,21 @@ function buildInstructions(options: {
 		'2) Run:',
 		'',
 		`   eprec edit \\`,
-		`     --input "${options.originalVideoPath}" \\`,
-		`     --transcript "${options.transcriptJsonPath}" \\`,
-		`     --edited "${options.transcriptTextPath}" \\`,
-		`     --output "${path.join(options.editsDirectory, options.outputBasename)}"`,
+		`     --input ${escapeShellArg(options.originalVideoPath)} \\`,
+		`     --transcript ${escapeShellArg(options.transcriptJsonPath)} \\`,
+		`     --edited ${escapeShellArg(options.transcriptTextPath)} \\`,
+		`     --output ${escapeShellArg(outputPath)}`,
 		'',
 		'If the transcript no longer matches, regenerate it with:',
 		'',
-		`   bun process-course/edits/regenerate-transcript.ts --dir "${options.editsDirectory}"`,
+		`   bun process-course/edits/regenerate-transcript.ts --dir ${escapeShellArg(options.editsDirectory)}`,
 		'',
 	].join('\n')
+}
+
+function escapeShellArg(value: string) {
+	if (value.length === 0) {
+		return "''"
+	}
+	return `'${value.replace(/'/g, "'\"'\"'")}'`
 }
