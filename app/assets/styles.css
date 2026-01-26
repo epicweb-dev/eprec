@@ -212,10 +212,6 @@ p {
 	border-radius: 0;
 }
 
-.stacked-item + .stacked-item {
-	border-top: none;
-}
-
 .stacked-item:first-child {
 	border-top-left-radius: var(--radius-lg);
 	border-top-right-radius: var(--radius-lg);
