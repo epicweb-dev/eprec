@@ -54,6 +54,14 @@ import type {
 } from './types'
 import { createEditWorkspace } from './edits'
 
+export type ChapterProgressReporter = {
+	start: (options: { stepCount: number; label?: string }) => void
+	step: (label: string) => void
+	setLabel: (label: string) => void
+	finish: (label?: string) => void
+	skip: (label: string) => void
+}
+
 export interface ChapterProcessingOptions {
 	inputPath: string
 	outputDir: string
@@ -67,6 +75,7 @@ export interface ChapterProcessingOptions {
 	writeLogs: boolean
 	dryRun: boolean
 	previousProcessedChapter?: ProcessedChapterInfo | null
+	progress?: ChapterProgressReporter
 }
 
 export interface ChapterProcessingResult {
@@ -100,10 +109,15 @@ export async function processChapter(
 		)
 	}
 
+	const progress = options.progress
+	const stepCount = options.dryRun ? 1 : options.enableTranscription ? 8 : 7
+
 	const outputBasePath = path.join(
 		options.outputDir,
 		`${formatChapterFilename(chapter)}${path.extname(options.inputPath)}`,
 	)
+
+	progress?.start({ stepCount, label: 'Starting' })
 
 	// Check minimum duration before processing
 	if (duration < options.minChapterDurationSeconds) {
@@ -121,6 +135,7 @@ export async function processChapter(
 			])
 			logWritten = true
 		}
+		progress?.skip('Skipped (short)')
 		return { status: 'skipped', skipReason: 'short-initial', logWritten }
 	}
 
@@ -129,6 +144,7 @@ export async function processChapter(
 		logInfo(
 			`[dry-run] Would process chapter ${chapter.index + 1}: ${chapter.title}`,
 		)
+		progress?.finish('Dry run')
 		return { status: 'processed', skipReason: 'dry-run', logWritten: false }
 	}
 
@@ -139,6 +155,7 @@ export async function processChapter(
 
 	try {
 		// Step 1: Extract raw segment with padding trimmed
+		progress?.step('Extracting segment')
 		const rawTrimStart = chapter.start + CONFIG.rawTrimPaddingSeconds
 		const rawTrimEnd = chapter.end - CONFIG.rawTrimPaddingSeconds
 		const rawDuration = rawTrimEnd - rawTrimStart
@@ -156,6 +173,7 @@ export async function processChapter(
 		})
 
 		// Step 2: Normalize audio
+		progress?.step('Normalizing audio')
 		const analysis = await analyzeLoudness(paths.rawPath, 0, rawDuration)
 		await renderChapter({
 			inputPath: paths.rawPath,
@@ -170,8 +188,10 @@ export async function processChapter(
 		let commandFilenameOverride: string | null = null
 		let hasEditCommand = false
 		let commandNotes: Array<{ value: string; window: TimeRange }> = []
+		let usedSpliceStep = false
 
 		if (options.enableTranscription) {
+			progress?.step('Transcribing audio')
 			const transcriptionResult = await transcribeAndAnalyze({
 				normalizedPath: paths.normalizedPath,
 				transcriptionAudioPath: paths.transcriptionAudioPath,
@@ -192,6 +212,7 @@ export async function processChapter(
 					logWritten = true
 				}
 				await safeUnlink(outputBasePath)
+				progress?.skip('Skipped (transcript)')
 				return {
 					status: 'skipped',
 					skipReason: transcriptionResult.hasBadTake
@@ -213,6 +234,8 @@ export async function processChapter(
 						`Combine previous command detected for chapter ${chapter.index + 1}, but no previous chapter available. Processing normally.`,
 					)
 				} else {
+					progress?.step('Combining previous')
+					usedSpliceStep = true
 					const combineResult = await handleCombinePrevious({
 						chapter,
 						previousProcessedChapter: options.previousProcessedChapter,
@@ -227,8 +250,10 @@ export async function processChapter(
 					})
 					// If combine failed (returned null), continue with normal processing
 					if (combineResult !== null) {
+						progress?.finish('Combined')
 						return combineResult
 					}
+					progress?.setLabel('Splicing commands')
 					// Otherwise, fall through to normal processing
 				}
 			}
@@ -242,6 +267,9 @@ export async function processChapter(
 		)
 
 		// Step 5: Handle command splicing
+		if (!usedSpliceStep) {
+			progress?.step('Splicing commands')
+		}
 		const spliceResult = await handleCommandSplicing({
 			commandWindows,
 			normalizedPath: paths.normalizedPath,
@@ -252,6 +280,7 @@ export async function processChapter(
 		})
 
 		// Step 6: Detect speech bounds
+		progress?.step('Detecting speech')
 		const speechBounds = await detectSpeechBounds(
 			spliceResult.sourcePath,
 			0,
@@ -275,6 +304,7 @@ export async function processChapter(
 		}
 
 		// Step 7: Apply speech padding
+		progress?.step('Trimming')
 		const paddedStart = clamp(
 			speechBounds.start - CONFIG.preSpeechPaddingSeconds,
 			0,
@@ -314,10 +344,12 @@ export async function processChapter(
 				logWritten = true
 			}
 			await safeUnlink(outputBasePath)
+			progress?.skip('Skipped (trimmed)')
 			return { status: 'skipped', skipReason: 'short-trimmed', logWritten }
 		}
 
 		// Step 9: Write final output
+		progress?.step('Writing output')
 		await extractChapterSegment({
 			inputPath: spliceResult.sourcePath,
 			outputPath: finalOutputPath,
@@ -326,6 +358,7 @@ export async function processChapter(
 		})
 
 		// Step 10: Verify no jarvis in final output
+		progress?.step('Verifying output')
 		let jarvisWarning: JarvisWarning | undefined
 		await extractTranscriptionAudio({
 			inputPath: finalOutputPath,
@@ -412,6 +445,7 @@ export async function processChapter(
 			processedDuration: trimmedDuration,
 		}
 
+		progress?.finish('Complete')
 		return {
 			status: 'processed',
 			jarvisWarning,
