@@ -23,6 +23,8 @@ const MIN_CUT_LENGTH = 0.2
 const DEFAULT_CUT_LENGTH = 2.4
 const PLAYHEAD_STEP = 0.1
 const DEFAULT_PREVIEW_URL = '/e2e-test.mp4'
+const QUEUE_API_BASE = '/api/processing-queue'
+const QUEUE_STREAM_URL = `${QUEUE_API_BASE}/stream`
 
 function readInitialVideoPath() {
 	if (typeof window === 'undefined') return ''
@@ -42,14 +44,36 @@ function extractVideoName(value: string) {
 	return last && last.length > 0 ? last : value
 }
 
-type ProcessingStatus = 'queued' | 'running' | 'done'
+type ProcessingStatus = 'queued' | 'running' | 'done' | 'error'
 type ProcessingCategory = 'chapter' | 'transcript' | 'export'
+type ProcessingAction =
+	| 'edit-chapter'
+	| 'combine-chapters'
+	| 'regenerate-transcript'
+	| 'detect-command-windows'
+	| 'render-preview'
+	| 'export-final'
+type ProcessingProgress = {
+	step: number
+	totalSteps: number
+	label: string
+	percent: number
+}
 type ProcessingTask = {
 	id: string
 	title: string
 	detail: string
 	status: ProcessingStatus
 	category: ProcessingCategory
+	action: ProcessingAction
+	progress?: ProcessingProgress
+	errorMessage?: string
+	updatedAt: number
+	createdAt: number
+}
+type ProcessingQueueSnapshot = {
+	tasks: ProcessingTask[]
+	activeTaskId: string | null
 }
 
 export function EditingWorkspace(handle: Handle) {
@@ -79,8 +103,9 @@ export function EditingWorkspace(handle: Handle) {
 	let primaryChapterId = chapters[0]?.id ?? ''
 	let secondaryChapterId = chapters[1]?.id ?? chapters[0]?.id ?? ''
 	let processingQueue: ProcessingTask[] = []
-	let activeTaskId: string | null = null
-	let processingCount = 1
+	let queueLoading = true
+	let queueError = ''
+	let queueStreamStatus: 'connecting' | 'open' | 'error' = 'connecting'
 	let manualCutId = 1
 	let previewDuration = 0
 	let previewReady = false
@@ -176,6 +201,8 @@ export function EditingWorkspace(handle: Handle) {
 	if (initialVideoPath) {
 		void loadVideoFromPath(initialVideoPath)
 	}
+	void loadQueueSnapshot()
+	connectQueueStream()
 
 	const setPlayhead = (value: number) => {
 		playhead = clamp(value, 0, duration)
@@ -309,26 +336,98 @@ export function EditingWorkspace(handle: Handle) {
 		handle.update()
 	}
 
+	const applyQueueSnapshot = (snapshot: ProcessingQueueSnapshot) => {
+		processingQueue = Array.isArray(snapshot.tasks) ? snapshot.tasks : []
+		queueLoading = false
+		queueError = ''
+		handle.update()
+	}
+
+	const setQueueError = (message: string) => {
+		queueError = message
+		queueLoading = false
+		handle.update()
+	}
+
+	const requestQueue = async (
+		path: string,
+		options: RequestInit & { body?: string } = {},
+	) => {
+		try {
+			const response = await fetch(`${QUEUE_API_BASE}${path}`, {
+				...options,
+				headers: {
+					Accept: 'application/json',
+					...(options.body ? { 'Content-Type': 'application/json' } : {}),
+				},
+				signal: handle.signal,
+			})
+			if (!response.ok) {
+				throw new Error(`Queue request failed (${response.status}).`)
+			}
+			const snapshot =
+				(await response.json()) as ProcessingQueueSnapshot
+			applyQueueSnapshot(snapshot)
+		} catch (error) {
+			if (handle.signal.aborted) return
+			setQueueError(
+				error instanceof Error
+					? error.message
+					: 'Unable to reach the processing queue.',
+			)
+		}
+	}
+
+	const loadQueueSnapshot = async () => {
+		await requestQueue('', { method: 'GET' })
+	}
+
+	const connectQueueStream = () => {
+		if (typeof window === 'undefined') return
+		const stream = new EventSource(QUEUE_STREAM_URL)
+		const updateStatus = () => {
+			queueStreamStatus =
+				stream.readyState === EventSource.OPEN
+					? 'open'
+					: stream.readyState === EventSource.CONNECTING
+						? 'connecting'
+						: 'error'
+			handle.update()
+		}
+		stream.addEventListener('open', updateStatus)
+		stream.addEventListener('error', updateStatus)
+		stream.addEventListener('snapshot', (event) => {
+			try {
+				const snapshot = JSON.parse(
+					(event as MessageEvent<string>).data,
+				) as ProcessingQueueSnapshot
+				applyQueueSnapshot(snapshot)
+			} catch (error) {
+				setQueueError('Unable to parse queue updates.')
+			}
+		})
+		handle.signal.addEventListener('abort', () => {
+			stream.close()
+		})
+	}
+
 	const queueTask = (
+		action: ProcessingAction,
 		title: string,
 		detail: string,
 		category: ProcessingCategory,
 	) => {
-		const task: ProcessingTask = {
-			id: `task-${processingCount++}`,
-			title,
-			detail,
-			status: 'queued',
-			category,
-		}
-		processingQueue = [...processingQueue, task]
-		handle.update()
+		void requestQueue('/enqueue', {
+			method: 'POST',
+			body: JSON.stringify({ action, title, detail, category }),
+		})
 	}
 
 	const queueChapterEdit = () => {
 		const chapter = findChapter(primaryChapterId)
 		if (!chapter) return
 		queueTask(
+			'edit-chapter',
 			`Edit ${chapter.title}`,
 			`Review trims for ${formatTimestamp(chapter.start)} - ${formatTimestamp(
 				chapter.end,
@@ -342,6 +441,7 @@ export function EditingWorkspace(handle: Handle) {
 		const secondary = findChapter(secondaryChapterId)
 		if (!primary || !secondary || primary.id === secondary.id) return
 		queueTask(
+			'combine-chapters',
 			`Combine ${primary.title} + ${secondary.title}`,
 			'Merge both chapters into a single preview export.',
 			'chapter',
@@ -350,6 +450,7 @@ export function EditingWorkspace(handle: Handle) {
 
 	const queueTranscriptRegeneration = () => {
 		queueTask(
+			'regenerate-transcript',
 			'Regenerate transcript',
 			'Run Whisper alignment and refresh search cues.',
 			'transcript',
@@ -358,6 +459,7 @@ export function EditingWorkspace(handle: Handle) {
 
 	const queueCommandScan = () => {
 		queueTask(
+			'detect-command-windows',
 			'Detect command windows',
 			'Scan for Jarvis commands and update cut ranges.',
 			'transcript',
@@ -366,6 +468,7 @@ export function EditingWorkspace(handle: Handle) {
 
 	const queuePreviewRender = () => {
 		queueTask(
+			'render-preview',
 			'Render preview clip',
 			'Bake a short MP4 with current edits applied.',
 			'export',
@@ -374,6 +477,7 @@ export function EditingWorkspace(handle: Handle) {
 
 	const queueFinalExport = () => {
 		queueTask(
+			'export-final',
 			'Export edited chapters',
 			'Render final chapters and write the export package.',
 			'export',
@@ -381,36 +485,21 @@ export function EditingWorkspace(handle: Handle) {
 	}
 
 	const startNextTask = () => {
-		if (activeTaskId) return
-		const next = processingQueue.find((task) => task.status === 'queued')
-		if (!next) return
-		activeTaskId = next.id
-		processingQueue = processingQueue.map((task) =>
-			task.id === next.id ? { ...task, status: 'running' } : task,
-		)
-		handle.update()
+		void requestQueue('/run-next', { method: 'POST' })
 	}
 
 	const markActiveDone = () => {
-		if (!activeTaskId) return
-		processingQueue = processingQueue.map((task) =>
-			task.id === activeTaskId ? { ...task, status: 'done' } : task,
-		)
-		activeTaskId = null
-		handle.update()
+		void requestQueue('/mark-done', { method: 'POST' })
 	}
 
 	const clearCompletedTasks = () => {
-		processingQueue = processingQueue.filter((task) => task.status !== 'done')
-		handle.update()
+		void requestQueue('/clear-completed', { method: 'POST' })
 	}
 
 	const removeTask = (taskId: string) => {
-		processingQueue = processingQueue.filter((task) => task.id !== taskId)
-		if (activeTaskId === taskId) {
-			activeTaskId = null
-		}
-		handle.update()
+		void requestQueue(`/task/${encodeURIComponent(taskId)}`, {
+			method: 'DELETE',
+		})
 	}
 
 	const syncVideoToPlayhead = (value: number) => {
@@ -460,8 +549,28 @@ export function EditingWorkspace(handle: Handle) {
 		const completedCount = processingQueue.filter(
 			(task) => task.status === 'done',
 		).length
+		const errorCount = processingQueue.filter(
+			(task) => task.status === 'error',
+		).length
 		const runningTask =
 			processingQueue.find((task) => task.status === 'running') ?? null
+		const queueStreamMeta =
+			queueStreamStatus === 'open'
+				? { label: 'Live', className: 'status-pill--success' }
+				: queueStreamStatus === 'connecting'
+					? { label: 'Connecting', className: 'status-pill--warning' }
+					: { label: 'Offline', className: 'status-pill--danger' }
+		const runningSummary = runningTask
+			? runningTask.progress?.label
+				? `Running: ${runningTask.title} · ${runningTask.progress.label}`
+				: `Running: ${runningTask.title}`
+			: 'Idle'
+		const queueStreamSummary =
+			queueStreamStatus === 'open'
+				? 'Queue updates are live.'
+				: queueStreamStatus === 'connecting'
+					? 'Connecting to queue updates.'
+					: 'Queue updates are offline.'
 		const canCombineChapters =
 			primaryChapterId.length > 0 &&
 			secondaryChapterId.length > 0 &&
@@ -612,16 +721,37 @@ export function EditingWorkspace(handle: Handle) {
 							<div class="summary-item">
 								<span class="summary-label">Queue</span>
 								<span class="summary-value">{queuedCount} queued</span>
+								<span class="summary-subtext">{runningSummary}</span>
+							</div>
+							<div class="summary-item">
+								<span class="summary-label">Errors</span>
+								<span class="summary-value">{errorCount}</span>
 								<span class="summary-subtext">
-									{runningTask ? `Running: ${runningTask.title}` : 'Idle'}
+									{errorCount > 0
+										? 'Review failed tasks below.'
+										: 'No failures yet.'}
 								</span>
+							</div>
+							<div class="summary-item">
+								<span class="summary-label">Stream</span>
+								<span
+									class={classNames(
+										'status-pill',
+										queueStreamMeta.className,
+									)}
+								>
+									{queueStreamMeta.label}
+								</span>
+								<span class="summary-subtext">{queueStreamSummary}</span>
 							</div>
 						</div>
 						<div class="actions-buttons">
 							<button
 								class="button button--primary"
 								type="button"
-								disabled={queuedCount === 0 || Boolean(runningTask)}
+								disabled={
+									queueLoading || queuedCount === 0 || Boolean(runningTask)
+								}
 								on={{ click: startNextTask }}
 							>
 								Run next
@@ -629,7 +759,7 @@ export function EditingWorkspace(handle: Handle) {
 							<button
 								class="button button--ghost"
 								type="button"
-								disabled={!runningTask}
+								disabled={queueLoading || !runningTask}
 								on={{ click: markActiveDone }}
 							>
 								Mark running done
@@ -637,7 +767,7 @@ export function EditingWorkspace(handle: Handle) {
 							<button
 								class="button button--ghost"
 								type="button"
-								disabled={completedCount === 0}
+								disabled={queueLoading || completedCount === 0}
 								on={{ click: clearCompletedTasks }}
 							>
 								Clear completed
@@ -765,56 +895,107 @@ export function EditingWorkspace(handle: Handle) {
 						<div class="panel-header">
 							<h3>Processing queue</h3>
 							<span class="summary-subtext">
-								{processingQueue.length} total
+								{queueLoading
+									? 'Loading...'
+									: `${processingQueue.length} total`}
 							</span>
 						</div>
-						{processingQueue.length === 0 ? (
+						{queueError ? (
+							<p class="status-note status-note--danger">{queueError}</p>
+						) : null}
+						{queueLoading ? (
+							<p class="app-muted">Loading queue updates...</p>
+						) : processingQueue.length === 0 ? (
 							<p class="app-muted">
 								No actions queued yet. Use the buttons above to stage work.
 							</p>
 						) : (
 							<ul class="stacked-list processing-list">
-								{processingQueue.map((task) => (
-									<li
-										class={classNames(
-											'stacked-item',
-											'processing-row',
-											task.status === 'running' && 'is-running',
-											task.status === 'done' && 'is-complete',
-										)}
-									>
-										<div class="processing-row-header">
-											<div>
-												<h4>{task.title}</h4>
-												<p class="app-muted">{task.detail}</p>
-											</div>
-											<span
-												class={classNames(
-													'status-pill',
-													task.status === 'queued' && 'status-pill--info',
-													task.status === 'running' && 'status-pill--warning',
-													task.status === 'done' && 'status-pill--success',
-												)}
-											>
-												{task.status}
-											</span>
-										</div>
-										<div class="processing-row-meta">
-											<span class="summary-subtext">
-												{formatProcessingCategory(task.category)}
-											</span>
-											{task.status === 'queued' ? (
-												<button
-													class="button button--ghost"
-													type="button"
-													on={{ click: () => removeTask(task.id) }}
+								{processingQueue.map((task) => {
+									const showProgress =
+										task.status === 'running' || task.status === 'error'
+									const progress =
+										task.progress ??
+										(task.status === 'running'
+											? {
+													step: 0,
+													totalSteps: 0,
+													label: 'Starting',
+													percent: 0,
+												}
+											: null)
+									return (
+										<li
+											class={classNames(
+												'stacked-item',
+												'processing-row',
+												task.status === 'running' && 'is-running',
+												task.status === 'done' && 'is-complete',
+												task.status === 'error' && 'is-error',
+											)}
+										>
+											<div class="processing-row-header">
+												<div>
+													<h4>{task.title}</h4>
+													<p class="app-muted">{task.detail}</p>
+												</div>
+												<span
+													class={classNames(
+														'status-pill',
+														task.status === 'queued' &&
+															'status-pill--info',
+														task.status === 'running' &&
+															'status-pill--warning',
+														task.status === 'done' &&
+															'status-pill--success',
+														task.status === 'error' &&
+															'status-pill--danger',
+													)}
 												>
-													Remove
-												</button>
+													{task.status}
+												</span>
+											</div>
+											{showProgress && progress ? (
+												<div class="processing-progress">
+													<div class="processing-progress-meta">
+														<span>{progress.label}</span>
+														<span>
+															{progress.totalSteps > 0
+																? `${progress.step}/${progress.totalSteps}`
+																: '...'}
+														</span>
+													</div>
+													<div class="processing-progress-bar">
+														<span
+															class="processing-progress-fill"
+															style={`--progress:${progress.percent}%`}
+														/>
+													</div>
+												</div>
 											) : null}
-										</div>
-									</li>
-								))}
+											{task.status === 'error' && task.errorMessage ? (
+												<p class="status-note status-note--danger processing-error">
+													{task.errorMessage}
+												</p>
+											) : null}
+											<div class="processing-row-meta">
+												<span class="summary-subtext">
+													{formatProcessingCategory(task.category)}
+												</span>
+												{task.status === 'queued' ||
+												task.status === 'error' ? (
+													<button
+														class="button button--ghost"
+														type="button"
+														on={{ click: () => removeTask(task.id) }}
+													>
+														Remove
+													</button>
+												) : null}
+											</div>
+										</li>
+									)
+								})}
 							</ul>
 						)}
 					</div>
