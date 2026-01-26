@@ -54,6 +54,24 @@ export class PromptCancelled extends Error {
 	}
 }
 
+export function handlePromptFailure(
+	message: string | null | undefined,
+	error: Error | undefined,
+	parser: { showHelp: () => void },
+) {
+	if (error instanceof PromptCancelled) {
+		throw error
+	}
+	parser.showHelp()
+	if (message) {
+		throw new Error(message)
+	}
+	if (error) {
+		throw error
+	}
+	throw new Error('Unknown error')
+}
+
 function isExitPromptError(error: unknown) {
 	if (error instanceof Error) {
 		return (

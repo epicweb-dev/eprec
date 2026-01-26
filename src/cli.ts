@@ -28,6 +28,7 @@ import {
 	createInquirerPrompter,
 	createPathPicker,
 	createStepProgressReporter,
+	handlePromptFailure,
 	isInteractive,
 	pauseActiveSpinner,
 	resumeActiveSpinner,
@@ -41,24 +42,6 @@ type CliUxContext = {
 	interactive: boolean
 	prompter?: Prompter
 	pathPicker?: PathPicker
-}
-
-function handlePromptFailure(
-	message: string | null | undefined,
-	error: Error | undefined,
-	parser: Argv,
-) {
-	if (error instanceof PromptCancelled) {
-		throw error
-	}
-	parser.showHelp()
-	if (message) {
-		throw new Error(message)
-	}
-	if (error) {
-		throw error
-	}
-	throw new Error('Unknown error')
 }
 
 async function main(rawArgs = hideBin(process.argv)) {

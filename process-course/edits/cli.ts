@@ -8,6 +8,7 @@ import {
 	createInquirerPrompter,
 	createPathPicker,
 	createStepProgressReporter,
+	handlePromptFailure,
 	isInteractive,
 	pauseActiveSpinner,
 	resolveOptionalString,
@@ -42,24 +43,6 @@ export type CombineVideosCommandArgs = {
 type CliUxOptions = {
 	interactive: boolean
 	pathPicker?: PathPicker
-}
-
-function handlePromptFailure(
-	message: string | null | undefined,
-	error: Error | undefined,
-	parser: Argv,
-) {
-	if (error instanceof PromptCancelled) {
-		throw error
-	}
-	parser.showHelp()
-	if (message) {
-		throw new Error(message)
-	}
-	if (error) {
-		throw error
-	}
-	throw new Error('Unknown error')
 }
 
 export function buildCombinedOutputPath(
