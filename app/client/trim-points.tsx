@@ -24,6 +24,7 @@ const PLAYHEAD_STEP = 0.1
 const KEYBOARD_STEP = 0.1
 const SHIFT_STEP = 1
 const DEMO_VIDEO_PATH = 'fixtures/e2e-test.mp4'
+const WAVEFORM_SAMPLES = 240
 
 function readInitialVideoPath() {
 	if (typeof window === 'undefined') return ''
@@ -63,6 +64,30 @@ function formatTimestamp(value: number) {
 	return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`
 }
 
+function parseTimestampInput(value: string) {
+	const trimmed = value.trim()
+	if (!trimmed) return null
+	if (/^\d+(\.\d+)?$/.test(trimmed)) {
+		const seconds = Number.parseFloat(trimmed)
+		return Number.isFinite(seconds) ? seconds : null
+	}
+	const parts = trimmed.split(':').map((part) => part.trim())
+	if (parts.length !== 2 && parts.length !== 3) return null
+	const secondsPart = Number.parseFloat(parts[parts.length - 1] ?? '')
+	const minutesPart = Number.parseFloat(parts[parts.length - 2] ?? '')
+	const hoursPart =
+		parts.length === 3 ? Number.parseFloat(parts[0] ?? '') : 0
+	if (
+		!Number.isFinite(secondsPart) ||
+		!Number.isFinite(minutesPart) ||
+		!Number.isFinite(hoursPart)
+	) {
+		return null
+	}
+	if (secondsPart < 0 || minutesPart < 0 || hoursPart < 0) return null
+	return hoursPart * 3600 + minutesPart * 60 + secondsPart
+}
+
 function formatSeconds(value: number) {
 	return `${value.toFixed(1)}s`
 }
@@ -86,6 +111,9 @@ export function TrimPoints(handle: Handle) {
 	let previewNode: HTMLVideoElement | null = null
 	let trackNode: HTMLDivElement | null = null
 	let playhead = 0
+	let previewPlaying = false
+	let timeInputValue = formatTimestamp(playhead)
+	let isTimeEditing = false
 	let trimRanges: TrimRangeWithId[] = []
 	let selectedRangeId: string | null = null
 	let rangeCounter = 1
@@ -98,6 +126,11 @@ export function TrimPoints(handle: Handle) {
 	let runLogs: string[] = []
 	let runController: AbortController | null = null
 	let initialLoadTriggered = false
+	let waveformSamples: number[] = []
+	let waveformStatus: 'idle' | 'loading' | 'ready' | 'error' = 'idle'
+	let waveformError = ''
+	let waveformSource = ''
+	let waveformNode: HTMLCanvasElement | null = null
 
 	const updateVideoPathInput = (value: string) => {
 		videoPathInput = value
@@ -115,6 +148,159 @@ export function TrimPoints(handle: Handle) {
 		previewReady = false
 		previewError = ''
 		previewDuration = 0
+	}
+
+	const syncVideoToTime = (
+		value: number,
+		options: { skipVideo?: boolean; updateInput?: boolean } = {},
+	) => {
+		const maxDuration = previewDuration > 0 ? previewDuration : value
+		const nextTime = clamp(value, 0, Math.max(maxDuration, 0))
+		playhead = nextTime
+		if (!isTimeEditing || options.updateInput) {
+			timeInputValue = formatTimestamp(nextTime)
+		}
+		if (
+			previewNode &&
+			previewReady &&
+			!options.skipVideo &&
+			Math.abs(previewNode.currentTime - nextTime) > 0.02
+		) {
+			previewNode.currentTime = nextTime
+		}
+		handle.update()
+	}
+
+	const updateTimeInput = (value: string) => {
+		timeInputValue = value
+		isTimeEditing = true
+		handle.update()
+	}
+
+	const commitTimeInput = () => {
+		const parsed = parseTimestampInput(timeInputValue)
+		isTimeEditing = false
+		if (parsed === null) {
+			timeInputValue = formatTimestamp(playhead)
+			handle.update()
+			return
+		}
+		syncVideoToTime(parsed, { updateInput: true })
+	}
+
+	const drawWaveform = () => {
+		if (!waveformNode) return
+		const ctx = waveformNode.getContext('2d')
+		if (!ctx) return
+		const width = waveformNode.clientWidth
+		const height = waveformNode.clientHeight
+		if (width <= 0 || height <= 0) return
+		const dpr =
+			typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+		waveformNode.width = Math.floor(width * dpr)
+		waveformNode.height = Math.floor(height * dpr)
+		ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+		ctx.clearRect(0, 0, width, height)
+		const color =
+			typeof window !== 'undefined'
+				? window.getComputedStyle(waveformNode).color
+				: '#94a3b8'
+		ctx.strokeStyle = color
+		ctx.lineWidth = 1
+		if (waveformSamples.length === 0) {
+			ctx.beginPath()
+			ctx.moveTo(0, height / 2)
+			ctx.lineTo(width, height / 2)
+			ctx.stroke()
+			return
+		}
+		const mid = height / 2
+		const step = width / waveformSamples.length
+		ctx.beginPath()
+		waveformSamples.forEach((sample, index) => {
+			const x = index * step
+			const amplitude = sample * (mid - 2)
+			ctx.moveTo(x, mid - amplitude)
+			ctx.lineTo(x, mid + amplitude)
+		})
+		ctx.stroke()
+	}
+
+	const loadWaveform = async (url: string) => {
+		if (!url || waveformStatus === 'loading') return
+		if (waveformSource === url && waveformStatus === 'ready') return
+		waveformSource = url
+		waveformStatus = 'loading'
+		waveformError = ''
+		waveformSamples = []
+		drawWaveform()
+		handle.update()
+		try {
+			if (typeof window === 'undefined' || !('AudioContext' in window)) {
+				throw new Error('AudioContext unavailable in this browser.')
+			}
+			const response = await fetch(url, {
+				cache: 'no-store',
+				signal: handle.signal,
+			})
+			if (!response.ok) {
+				throw new Error(`Waveform load failed (status ${response.status}).`)
+			}
+			const buffer = await response.arrayBuffer()
+			if (handle.signal.aborted) return
+			const audioContext = new AudioContext()
+			let audioBuffer: AudioBuffer
+			try {
+				audioBuffer = await audioContext.decodeAudioData(buffer.slice(0))
+			} finally {
+				void audioContext.close()
+			}
+			if (audioBuffer.numberOfChannels === 0) {
+				throw new Error('No audio track found in the video.')
+			}
+			const channelCount = audioBuffer.numberOfChannels
+			const channels = Array.from({ length: channelCount }, (_, index) =>
+				audioBuffer.getChannelData(index),
+			)
+			const totalSamples = audioBuffer.length
+			const sampleCount = Math.max(
+				1,
+				Math.min(WAVEFORM_SAMPLES, totalSamples),
+			)
+			const blockSize = Math.max(1, Math.floor(totalSamples / sampleCount))
+			const samples = new Array(sampleCount).fill(0)
+			let maxValue = 0
+			for (let i = 0; i < sampleCount; i++) {
+				const start = i * blockSize
+				const end =
+					i === sampleCount - 1 ? totalSamples : start + blockSize
+				let peak = 0
+				for (let j = start; j < end; j++) {
+					let sum = 0
+					for (const channel of channels) {
+						sum += Math.abs(channel[j] ?? 0)
+					}
+					const avg = sum / channelCount
+					if (avg > peak) peak = avg
+				}
+				samples[i] = peak
+				if (peak > maxValue) maxValue = peak
+			}
+			const normalizedSamples =
+				maxValue > 0 ? samples.map((sample) => sample / maxValue) : samples
+			waveformSamples = normalizedSamples
+			waveformStatus = 'ready'
+			handle.update()
+			drawWaveform()
+		} catch (error) {
+			if (handle.signal.aborted) return
+			waveformStatus = 'error'
+			waveformError =
+				error instanceof Error
+					? error.message
+					: 'Unable to render waveform.'
+			handle.update()
+		}
 	}
 
 	const applyPreviewSource = (url: string) => {
@@ -154,6 +340,7 @@ export function TrimPoints(handle: Handle) {
 			pathStatus = 'ready'
 			outputPathInput = buildOutputPath(candidate)
 			applyPreviewSource(preview)
+			void loadWaveform(preview)
 		} catch (error) {
 			if (handle.signal.aborted) return
 			pathStatus = 'error'
@@ -176,8 +363,7 @@ export function TrimPoints(handle: Handle) {
 
 	const setPlayhead = (value: number) => {
 		if (!previewReady || previewDuration <= 0) return
-		playhead = clamp(value, 0, previewDuration)
-		handle.update()
+		syncVideoToTime(value, { updateInput: true })
 	}
 
 	const addTrimRange = () => {
@@ -200,7 +386,7 @@ export function TrimPoints(handle: Handle) {
 		}
 		trimRanges = sortRanges([...trimRanges, newRange])
 		selectedRangeId = newRange.id
-		handle.update()
+		syncVideoToTime(start, { updateInput: true })
 	}
 
 	const removeTrimRange = (rangeId: string) => {
@@ -260,6 +446,11 @@ export function TrimPoints(handle: Handle) {
 
 	const selectRange = (rangeId: string) => {
 		selectedRangeId = rangeId
+		const range = trimRanges.find((entry) => entry.id === rangeId)
+		if (range) {
+			syncVideoToTime(range.start, { updateInput: true })
+			return
+		}
 		handle.update()
 	}
 
@@ -279,16 +470,20 @@ export function TrimPoints(handle: Handle) {
 		activeDrag = { rangeId, edge, pointerId: event.pointerId }
 		const target = event.currentTarget as HTMLElement
 		target.setPointerCapture(event.pointerId)
-		updateTrimRange(rangeId, { [edge]: getTimeFromClientX(event.clientX) }, edge)
+		const nextTime = getTimeFromClientX(event.clientX)
+		updateTrimRange(rangeId, { [edge]: nextTime }, edge)
+		syncVideoToTime(nextTime, { updateInput: true })
 	}
 
 	const moveDrag = (event: PointerEvent) => {
 		if (!activeDrag || activeDrag.pointerId !== event.pointerId) return
+		const nextTime = getTimeFromClientX(event.clientX)
 		updateTrimRange(
 			activeDrag.rangeId,
-			{ [activeDrag.edge]: getTimeFromClientX(event.clientX) },
+			{ [activeDrag.edge]: nextTime },
 			activeDrag.edge,
 		)
+		syncVideoToTime(nextTime, { updateInput: true })
 	}
 
 	const endDrag = (event: PointerEvent) => {
@@ -309,13 +504,15 @@ export function TrimPoints(handle: Handle) {
 		event.preventDefault()
 		const step = event.shiftKey ? SHIFT_STEP : KEYBOARD_STEP
 		const delta = isForward ? step : -step
+		const nextValue = edge === 'start' ? range.start + delta : range.end + delta
 		updateTrimRange(
 			range.id,
 			{
-				[edge]: edge === 'start' ? range.start + delta : range.end + delta,
+				[edge]: nextValue,
 			},
 			edge,
 		)
+		syncVideoToTime(nextValue, { updateInput: true })
 	}
 
 	const handleNumberKey = (
@@ -327,13 +524,15 @@ export function TrimPoints(handle: Handle) {
 		event.preventDefault()
 		const step = event.shiftKey ? SHIFT_STEP : KEYBOARD_STEP
 		const delta = event.key === 'ArrowUp' ? step : -step
+		const nextValue = edge === 'start' ? range.start + delta : range.end + delta
 		updateTrimRange(
 			range.id,
 			{
-				[edge]: edge === 'start' ? range.start + delta : range.end + delta,
+				[edge]: nextValue,
 			},
 			edge,
 		)
+		syncVideoToTime(nextValue, { updateInput: true })
 	}
 
 	const runTrimCommand = async () => {
@@ -615,6 +814,32 @@ export function TrimPoints(handle: Handle) {
 										previewReady = previewDuration > 0
 										previewError = ''
 										playhead = clamp(playhead, 0, previewDuration)
+										if (!isTimeEditing) {
+											timeInputValue = formatTimestamp(playhead)
+										}
+										if (
+											Math.abs(node.currentTime - playhead) > 0.02 &&
+											previewReady
+										) {
+											node.currentTime = playhead
+										}
+										void loadWaveform(previewUrl)
+										handle.update()
+									}
+									const handleTimeUpdate = () => {
+										if (!previewReady || previewDuration <= 0) return
+										playhead = clamp(node.currentTime, 0, previewDuration)
+										if (!isTimeEditing) {
+											timeInputValue = formatTimestamp(playhead)
+										}
+										handle.update()
+									}
+									const handlePlay = () => {
+										previewPlaying = true
+										handle.update()
+									}
+									const handlePause = () => {
+										previewPlaying = false
 										handle.update()
 									}
 									const handleError = () => {
@@ -623,9 +848,15 @@ export function TrimPoints(handle: Handle) {
 										handle.update()
 									}
 									node.addEventListener('loadedmetadata', handleLoaded)
+									node.addEventListener('timeupdate', handleTimeUpdate)
+									node.addEventListener('play', handlePlay)
+									node.addEventListener('pause', handlePause)
 									node.addEventListener('error', handleError)
 									signal.addEventListener('abort', () => {
 										node.removeEventListener('loadedmetadata', handleLoaded)
+										node.removeEventListener('timeupdate', handleTimeUpdate)
+										node.removeEventListener('play', handlePlay)
+										node.removeEventListener('pause', handlePause)
 										node.removeEventListener('error', handleError)
 										if (previewNode === node) {
 											previewNode = null
@@ -636,6 +867,44 @@ export function TrimPoints(handle: Handle) {
 							{previewError ? (
 								<p class="status-note status-note--danger">{previewError}</p>
 							) : null}
+							<div class="trim-time-row">
+								<label class="input-label">
+									Video time
+									<input
+										class="text-input text-input--compact"
+										type="text"
+										placeholder="00:00.00"
+										value={timeInputValue}
+										disabled={!previewReady}
+										on={{
+											focus: () => {
+												isTimeEditing = true
+												handle.update()
+											},
+											input: (event) => {
+												const target = event.currentTarget as HTMLInputElement
+												updateTimeInput(target.value)
+											},
+											blur: () => commitTimeInput(),
+											keydown: (event) => {
+												if (event.key === 'Enter') {
+													event.preventDefault()
+													commitTimeInput()
+												}
+												if (event.key === 'Escape') {
+													event.preventDefault()
+													isTimeEditing = false
+													timeInputValue = formatTimestamp(playhead)
+													handle.update()
+												}
+											},
+										}}
+									/>
+								</label>
+								<span class="summary-subtext">
+									{previewPlaying ? 'Playing' : 'Paused'}
+								</span>
+							</div>
 						</div>
 					</div>
 				</section>
@@ -672,6 +941,22 @@ export function TrimPoints(handle: Handle) {
 						}}
 						style={`--playhead:${duration > 0 ? (playhead / duration) * 100 : 0}%`}
 					>
+						<canvas
+							class="trim-waveform"
+							connect={(node: HTMLCanvasElement, signal) => {
+								waveformNode = node
+								drawWaveform()
+								if (typeof ResizeObserver === 'undefined') return
+								const observer = new ResizeObserver(() => drawWaveform())
+								observer.observe(node)
+								signal.addEventListener('abort', () => {
+									observer.disconnect()
+									if (waveformNode === node) {
+										waveformNode = null
+									}
+								})
+							}}
+						/>
 						{sortedRanges.map((range) => (
 							<div
 								class={classNames(
@@ -701,6 +986,8 @@ export function TrimPoints(handle: Handle) {
 									aria-valuetext={formatTimestamp(range.start)}
 									aria-describedby={hintId}
 									on={{
+										focus: () =>
+											syncVideoToTime(range.start, { updateInput: true }),
 										pointerdown: (event) =>
 											startDrag(event, range.id, 'start'),
 										pointermove: moveDrag,
@@ -723,6 +1010,8 @@ export function TrimPoints(handle: Handle) {
 									aria-valuetext={formatTimestamp(range.end)}
 									aria-describedby={hintId}
 									on={{
+										focus: () =>
+											syncVideoToTime(range.end, { updateInput: true }),
 										pointerdown: (event) => startDrag(event, range.id, 'end'),
 										pointermove: moveDrag,
 										pointerup: endDrag,
@@ -733,6 +1022,17 @@ export function TrimPoints(handle: Handle) {
 							</div>
 						))}
 						<span class="trim-playhead" />
+					</div>
+					<div class="trim-waveform-meta">
+						{waveformStatus === 'loading' ? (
+							<span class="summary-subtext">Rendering waveform...</span>
+						) : waveformStatus === 'error' ? (
+							<span class="summary-subtext">{waveformError}</span>
+						) : (
+							<span class="summary-subtext">
+								Waveform {waveformSamples.length > 0 ? 'ready' : 'idle'}
+							</span>
+						)}
 					</div>
 					<div class="timeline-controls">
 						<label class="control-label">
@@ -818,6 +1118,10 @@ export function TrimPoints(handle: Handle) {
 													step={KEYBOARD_STEP}
 													value={range.start.toFixed(2)}
 													on={{
+														focus: () =>
+															syncVideoToTime(range.start, {
+																updateInput: true,
+															}),
 														input: (event) => {
 															const target =
 																event.currentTarget as HTMLInputElement
@@ -828,6 +1132,9 @@ export function TrimPoints(handle: Handle) {
 																{ start: nextValue },
 																'start',
 															)
+															syncVideoToTime(nextValue, {
+																updateInput: true,
+															})
 														},
 														keydown: (event) =>
 															handleNumberKey(event, range, 'start'),
@@ -844,6 +1151,10 @@ export function TrimPoints(handle: Handle) {
 													step={KEYBOARD_STEP}
 													value={range.end.toFixed(2)}
 													on={{
+														focus: () =>
+															syncVideoToTime(range.end, {
+																updateInput: true,
+															}),
 														input: (event) => {
 															const target =
 																event.currentTarget as HTMLInputElement
@@ -854,6 +1165,9 @@ export function TrimPoints(handle: Handle) {
 																{ end: nextValue },
 																'end',
 															)
+															syncVideoToTime(nextValue, {
+																updateInput: true,
+															})
 														},
 														keydown: (event) =>
 															handleNumberKey(event, range, 'end'),
