@@ -14,6 +14,7 @@ import {
 	findSpeechStartWithRmsFallback,
 } from '../utils/audio-analysis'
 import { allocateJoinPadding } from '../utils/video-editing'
+import type { StepProgressReporter } from '../../progress-reporter'
 
 export interface CombineVideosOptions {
 	video1Path: string
@@ -26,6 +27,8 @@ export interface CombineVideosOptions {
 	video2Duration?: number
 	outputPath: string
 	overlapPaddingMs?: number
+	progress?: StepProgressReporter
+	editProgressFactory?: (detail: string) => StepProgressReporter | undefined
 }
 
 export interface CombineVideosResult {
@@ -39,12 +42,17 @@ export interface CombineVideosResult {
 export async function combineVideos(
 	options: CombineVideosOptions,
 ): Promise<CombineVideosResult> {
+	const progress = options.progress
+	const totalSteps = 5
+	progress?.start({ stepCount: totalSteps, label: 'Preparing edits' })
+
 	const tempDir = await mkdtemp(path.join(os.tmpdir(), 'video-combine-'))
 	try {
 		const { video1Path, video2Path } = await applyOptionalEdits(
 			options,
 			tempDir,
 		)
+		progress?.step('Measuring durations')
 		const editsApplied =
 			options.video1EditedTextPath || options.video2EditedTextPath
 		const video1Duration = editsApplied
@@ -54,6 +62,8 @@ export async function combineVideos(
 			? await getMediaDurationSeconds(video2Path)
 			: (options.video2Duration ?? (await getMediaDurationSeconds(video2Path)))
 
+		progress?.step('Detecting speech')
+		progress?.setLabel('Checking first video')
 		const video1HasSpeech = await checkSegmentHasSpeech(
 			video1Path,
 			video1Duration,
@@ -67,6 +77,7 @@ export async function combineVideos(
 			}
 		}
 
+		progress?.setLabel('Finding first video speech end')
 		const paddingSeconds =
 			(options.overlapPaddingMs ?? EDIT_CONFIG.speechBoundaryPaddingMs) / 1000
 
@@ -74,6 +85,7 @@ export async function combineVideos(
 			inputPath: video1Path,
 			duration: video1Duration,
 		})
+		progress?.setLabel('Finding second video speech bounds')
 		const { speechStart: video2SpeechStart, speechEnd: video2SpeechEnd } =
 			await findVideo2SpeechBounds({
 				inputPath: video2Path,
@@ -103,8 +115,10 @@ export async function combineVideos(
 			video2Duration,
 		)
 
+		progress?.step('Trimming segments')
 		const segment1Path = path.join(tempDir, 'segment-1.mp4')
 		const segment2Path = path.join(tempDir, 'segment-2.mp4')
+		progress?.setLabel('Extracting segment 1/2')
 		await extractChapterSegmentAccurate({
 			inputPath: video1Path,
 			outputPath: segment1Path,
@@ -119,6 +133,7 @@ export async function combineVideos(
 				video2TrimStart,
 			}
 		}
+		progress?.setLabel('Extracting segment 2/2')
 		await extractChapterSegmentAccurate({
 			inputPath: video2Path,
 			outputPath: segment2Path,
@@ -126,6 +141,7 @@ export async function combineVideos(
 			end: video2TrimEnd,
 		})
 
+		progress?.setLabel('Validating trimmed speech')
 		const segment2HasSpeech = await checkSegmentHasSpeech(
 			segment2Path,
 			video2TrimEnd - video2TrimStart,
@@ -139,6 +155,7 @@ export async function combineVideos(
 			}
 		}
 
+		progress?.step('Combining output')
 		const resolvedOutputPath = await resolveOutputPath(
 			options.outputPath,
 			video1Path,
@@ -151,6 +168,7 @@ export async function combineVideos(
 			outputPath: resolvedOutputPath,
 		})
 		await finalizeOutput(resolvedOutputPath, options.outputPath)
+		progress?.finish('Complete')
 
 		return {
 			success: true,
@@ -176,18 +194,21 @@ async function applyOptionalEdits(
 ): Promise<{ video1Path: string; video2Path: string }> {
 	let video1Path = options.video1Path
 	let video2Path = options.video2Path
+	const editProgressFactory = options.editProgressFactory
 
 	if (options.video1EditedTextPath) {
 		if (!options.video1TranscriptJsonPath) {
 			throw new Error('Missing transcript JSON for first video edits.')
 		}
 		const editedPath = path.join(tempDir, 'video1-edited.mp4')
+		const progress = editProgressFactory?.('Edit first video')
 		const result = await editVideo({
 			inputPath: options.video1Path,
 			transcriptJsonPath: options.video1TranscriptJsonPath,
 			editedTextPath: options.video1EditedTextPath,
 			outputPath: editedPath,
 			paddingMs: options.overlapPaddingMs,
+			progress,
 		})
 		if (!result.success) {
 			throw new Error(result.error ?? 'Failed to edit first video.')
@@ -200,12 +221,14 @@ async function applyOptionalEdits(
 			throw new Error('Missing transcript JSON for second video edits.')
 		}
 		const editedPath = path.join(tempDir, 'video2-edited.mp4')
+		const progress = editProgressFactory?.('Edit second video')
 		const result = await editVideo({
 			inputPath: options.video2Path,
 			transcriptJsonPath: options.video2TranscriptJsonPath,
 			editedTextPath: options.video2EditedTextPath,
 			outputPath: editedPath,
 			paddingMs: options.overlapPaddingMs,
+			progress,
 		})
 		if (!result.success) {
 			throw new Error(result.error ?? 'Failed to edit second video.')

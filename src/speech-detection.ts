@@ -6,6 +6,7 @@ import { CONFIG } from '../process-course/config'
 import { formatSeconds, getMediaDurationSeconds } from './utils'
 import { speechFallback } from '../process-course/utils/audio-analysis'
 import type { SpeechBounds } from '../process-course/types'
+import type { StepProgressReporter } from '../progress-reporter'
 
 export type VadConfig = {
 	vadWindowSamples: number
@@ -27,6 +28,7 @@ export async function detectSpeechSegmentsWithVad(
 	samples: Float32Array,
 	sampleRate: number,
 	config: VadConfig,
+	options?: { onProgress?: () => void; updateStride?: number },
 ): Promise<VadSegment[]> {
 	const vadSession = await getVadSession(config)
 	const probabilities = await getVadProbabilities(
@@ -34,6 +36,7 @@ export async function detectSpeechSegmentsWithVad(
 		sampleRate,
 		config,
 		vadSession,
+		options,
 	)
 	return probabilitiesToSegments(
 		samples.length,
@@ -47,7 +50,10 @@ export async function detectSpeechSegmentsForFile(options: {
 	inputPath: string
 	start?: number
 	end?: number
+	progress?: StepProgressReporter
 }): Promise<SpeechSegment[]> {
+	const progress = options.progress
+	progress?.start({ stepCount: 1, label: 'Loading audio' })
 	const start = options.start ?? 0
 	if (!Number.isFinite(start) || start < 0) {
 		throw new Error('Start time must be a non-negative number.')
@@ -66,13 +72,31 @@ export async function detectSpeechSegmentsForFile(options: {
 		sampleRate: CONFIG.vadSampleRate,
 	})
 	if (samples.length === 0) {
+		progress?.finish('No audio')
 		return []
 	}
+	const windowSamples = CONFIG.vadWindowSamples
+	const totalWindows = Math.ceil(samples.length / windowSamples)
+	const updateStride = Math.max(1, Math.floor(totalWindows / 50))
+	const updateCount = Math.max(1, Math.ceil(totalWindows / updateStride))
+	progress?.start({ stepCount: updateCount, label: 'Running VAD' })
+	let progressUpdates = 0
 	const segments = await detectSpeechSegmentsWithVad(
 		samples,
 		CONFIG.vadSampleRate,
 		CONFIG,
+		{
+			onProgress: () => {
+				progressUpdates += 1
+				if (progressUpdates <= updateCount) {
+					progress?.step('Running VAD')
+				}
+			},
+			updateStride,
+		},
 	)
+	progress?.setLabel('Building segments')
+	progress?.finish('Complete')
 	return segments.map((segment) => ({
 		start: segment.start + start,
 		end: segment.end + start,
@@ -116,6 +140,7 @@ async function getVadProbabilities(
 	sampleRate: number,
 	config: VadConfig,
 	session: ort.InferenceSession,
+	options?: { onProgress?: () => void; updateStride?: number },
 ) {
 	const windowSamples = config.vadWindowSamples
 	const srTensor = new ort.Tensor(
@@ -126,6 +151,8 @@ async function getVadProbabilities(
 	const probabilities: number[] = []
 	let stateH = new Float32Array(2 * 1 * 64)
 	let stateC = new Float32Array(2 * 1 * 64)
+	const updateStride = Math.max(1, Math.floor(options?.updateStride ?? 1))
+	let updateIndex = 0
 
 	for (let offset = 0; offset < samples.length; offset += windowSamples) {
 		const chunk = samples.subarray(offset, offset + windowSamples)
@@ -154,6 +181,10 @@ async function getVadProbabilities(
 		probabilities.push((probTensor.data as Float32Array)[0] ?? 0)
 		stateH = new Float32Array(nextH.data as Float32Array)
 		stateC = new Float32Array(nextC.data as Float32Array)
+		if (updateIndex % updateStride === 0) {
+			options?.onProgress?.()
+		}
+		updateIndex += 1
 	}
 
 	return probabilities
