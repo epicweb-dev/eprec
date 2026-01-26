@@ -601,6 +601,11 @@ export function EditingWorkspace(handle: Handle) {
 						Review transcript-based edits, refine command windows, and prepare
 						the final CLI export in one place.
 					</p>
+					<nav class="app-nav">
+						<a class="app-link" href="/trim-points">
+							Trim points
+						</a>
+					</nav>
 				</header>
 
 				<section class="app-card app-card--full source-card">

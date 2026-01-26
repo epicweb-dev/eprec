@@ -18,6 +18,9 @@ const indexHandler = {
 							Review transcript-based edits, refine cut ranges, and prepare
 							exports.
 						</p>
+						<nav class="app-nav">
+							<a class="app-link" href="/trim-points">Trim points</a>
+						</nav>
 					</header>
 					<section class="app-card app-card--full">
 						<h2>Source video</h2>
