@@ -117,6 +117,10 @@
 		--spacing-section: var(--spacing-2xl);
 		--card-min-width: 220px;
 	}
+
+	.source-grid {
+		grid-template-columns: 1fr;
+	}
 }
 
 @media (max-width: 640px) {
@@ -188,6 +192,7 @@ p {
 	grid-template-columns: repeat(auto-fit, minmax(var(--card-min-width), 1fr));
 }
 
+
 .app-card {
 	background: var(--color-surface);
 	border-radius: var(--radius-xl);
@@ -225,6 +230,64 @@ p {
 .stacked-item.is-selected {
 	background: var(--color-info-surface);
 	box-shadow: inset 0 0 0 1px var(--color-border-accent);
+}
+
+.source-card {
+	gap: var(--spacing-lg);
+}
+
+.source-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--spacing-lg);
+	flex-wrap: wrap;
+}
+
+.source-grid {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-lg);
+}
+
+.source-fields {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-md);
+}
+
+.source-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--spacing-sm);
+}
+
+.status-note {
+	margin: 0;
+	padding: var(--spacing-sm) var(--spacing-md);
+	border-radius: var(--radius-md);
+	font-size: var(--font-size-xs);
+	background: var(--color-surface-muted);
+	color: var(--color-text-subtle);
+	border: 1px solid var(--color-border);
+}
+
+.status-note--success {
+	background: var(--color-success-surface);
+	color: var(--color-success-text);
+	border-color: color-mix(in srgb, var(--color-success-text) 20%, transparent);
+}
+
+.status-note--warning {
+	background: var(--color-warning-surface);
+	color: var(--color-warning-text);
+	border-color: var(--color-warning-border);
+}
+
+.status-note--danger {
+	background: var(--color-danger-surface);
+	color: var(--color-danger-text);
+	border-color: var(--color-danger-border);
 }
 
 .app-list {

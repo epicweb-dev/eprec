@@ -9,9 +9,39 @@ import {
 	type TranscriptWord,
 } from './edit-session-data.ts'
 
+type AppConfig = {
+	initialVideoPath?: string
+}
+
+declare global {
+	interface Window {
+		__EPREC_APP__?: AppConfig
+	}
+}
+
 const MIN_CUT_LENGTH = 0.2
 const DEFAULT_CUT_LENGTH = 2.4
 const PLAYHEAD_STEP = 0.1
+const DEFAULT_PREVIEW_URL = '/e2e-test.mp4'
+
+function readInitialVideoPath() {
+	if (typeof window === 'undefined') return ''
+	const raw = window.__EPREC_APP__?.initialVideoPath
+	if (typeof raw !== 'string') return ''
+	return raw.trim()
+}
+
+function buildVideoPreviewUrl(value: string) {
+	return `/api/video?path=${encodeURIComponent(value)}`
+}
+
+function extractVideoName(value: string) {
+	const normalized = value.replace(/\\/g, '/')
+	const parts = normalized.split('/')
+	const last = parts[parts.length - 1]
+	return last && last.length > 0 ? last : value
+}
+
 
 type ProcessingStatus = 'queued' | 'running' | 'done'
 type ProcessingCategory = 'chapter' | 'transcript' | 'export'
@@ -31,6 +61,17 @@ export function EditingWorkspace(handle: Handle) {
 		...word,
 		context: buildContext(transcript, word.index, 3),
 	}))
+	const initialVideoPath = readInitialVideoPath()
+	let sourceName = sampleEditSession.sourceName
+	let sourcePath = ''
+	let previewUrl = DEFAULT_PREVIEW_URL
+	let previewSource: 'demo' | 'path' = 'demo'
+	let videoPathInput = initialVideoPath
+	let pathStatus: 'idle' | 'loading' | 'ready' | 'error' = initialVideoPath
+		? 'loading'
+		: 'idle'
+	let pathError = ''
+	let previewError = ''
 	let cutRanges = sampleEditSession.cuts.map((range) => ({ ...range }))
 	let chapters = sampleEditSession.chapters.map((chapter) => ({ ...chapter }))
 	let playhead = 18.2
@@ -48,6 +89,94 @@ export function EditingWorkspace(handle: Handle) {
 	let previewNode: HTMLVideoElement | null = null
 	let lastSyncedPlayhead = playhead
 	let isScrubbing = false
+
+	const resetPreviewState = () => {
+		previewReady = false
+		previewPlaying = false
+		previewDuration = 0
+		previewError = ''
+		lastSyncedPlayhead = playhead
+	}
+
+	const updateVideoPathInput = (value: string) => {
+		videoPathInput = value
+		if (pathError) pathError = ''
+		if (pathStatus === 'error') pathStatus = 'idle'
+		handle.update()
+	}
+
+	const applyPreviewSource = (options: {
+		url: string
+		name: string
+		source: 'demo' | 'path'
+		path?: string
+	}) => {
+		previewUrl = options.url
+		sourceName = options.name
+		sourcePath = options.path ?? ''
+		previewSource = options.source
+		resetPreviewState()
+		handle.update()
+	}
+
+	const loadVideoFromPath = async (override?: string) => {
+		const candidate = (override ?? videoPathInput).trim()
+		if (!candidate) {
+			pathError = 'Enter a video file path to load.'
+			pathStatus = 'error'
+			handle.update()
+			return
+		}
+		videoPathInput = candidate
+		pathStatus = 'loading'
+		pathError = ''
+		previewError = ''
+		handle.update()
+		const preview = buildVideoPreviewUrl(candidate)
+		try {
+			const response = await fetch(preview, {
+				method: 'HEAD',
+				cache: 'no-store',
+				signal: handle.signal,
+			})
+			if (!response.ok) {
+				const message =
+					response.status === 404
+						? 'Video file not found. Check the path.'
+						: `Unable to load the video (status ${response.status}).`
+				throw new Error(message)
+			}
+			if (handle.signal.aborted) return
+			pathStatus = 'ready'
+			applyPreviewSource({
+				url: preview,
+				name: extractVideoName(candidate),
+				source: 'path',
+				path: candidate,
+			})
+		} catch (error) {
+			if (handle.signal.aborted) return
+			pathStatus = 'error'
+			pathError =
+				error instanceof Error ? error.message : 'Unable to load the video.'
+			handle.update()
+		}
+	}
+
+	const resetToDemo = () => {
+		pathStatus = 'idle'
+		pathError = ''
+		videoPathInput = ''
+		applyPreviewSource({
+			url: DEFAULT_PREVIEW_URL,
+			name: sampleEditSession.sourceName,
+			source: 'demo',
+		})
+	}
+
+	if (initialVideoPath) {
+		void loadVideoFromPath(initialVideoPath)
+	}
 
 	const setPlayhead = (value: number) => {
 		playhead = clamp(value, 0, duration)
@@ -339,13 +468,25 @@ export function EditingWorkspace(handle: Handle) {
 			secondaryChapterId.length > 0 &&
 			primaryChapterId !== secondaryChapterId
 		const commandPreview = buildCommandPreview(
-			sampleEditSession.sourceName,
+			sourceName,
 			chapters,
+			sourcePath,
 		)
 		const previewTime =
 			previewReady && previewDuration > 0
 				? (playhead / duration) * previewDuration
 				: 0
+		const previewStatus = previewError
+			? { label: 'Error', className: 'status-pill--danger' }
+			: previewReady
+				? previewPlaying
+					? { label: 'Playing', className: 'status-pill--info' }
+					: { label: 'Ready', className: 'status-pill--success' }
+				: { label: 'Loading', className: 'status-pill--warning' }
+		const sourceStatus =
+			previewSource === 'path'
+				? { label: 'Path', className: 'status-pill--success' }
+				: { label: 'Demo', className: 'status-pill--info' }
 
 		return (
 			<main class="app-shell">
@@ -358,12 +499,77 @@ export function EditingWorkspace(handle: Handle) {
 					</p>
 				</header>
 
+				<section class="app-card app-card--full source-card">
+					<div class="source-header">
+						<div>
+							<h2>Source video</h2>
+							<p class="app-muted">
+								Paste a full video path to preview it and update the CLI export.
+							</p>
+						</div>
+						<span
+							class={classNames('status-pill', sourceStatus.className)}
+							title={`Preview source: ${sourceStatus.label}`}
+						>
+							{sourceStatus.label}
+						</span>
+					</div>
+					<div class="source-grid">
+						<div class="source-fields">
+							<label class="input-label">
+								Video file path
+								<input
+									class="text-input"
+									type="text"
+									placeholder="/path/to/video.mp4"
+									value={videoPathInput}
+									on={{
+										input: (event) => {
+											const target =
+												event.currentTarget as HTMLInputElement
+											updateVideoPathInput(target.value)
+										},
+									}}
+								/>
+							</label>
+							<div class="source-actions">
+								<button
+									class="button button--primary"
+									type="button"
+									disabled={
+										pathStatus === 'loading' ||
+										videoPathInput.trim().length === 0
+									}
+									on={{ click: () => void loadVideoFromPath() }}
+								>
+									{pathStatus === 'loading' ? 'Checking...' : 'Load from path'}
+								</button>
+								<button
+									class="button button--ghost"
+									type="button"
+									on={{ click: resetToDemo }}
+								>
+									Use demo video
+								</button>
+							</div>
+							{pathStatus === 'error' && pathError ? (
+								<p class="status-note status-note--danger">{pathError}</p>
+							) : null}
+						</div>
+					</div>
+				</section>
+
 				<section class="app-card app-card--full">
 					<h2>Session summary</h2>
 					<div class="summary-grid">
 						<div class="summary-item">
 							<span class="summary-label">Source video</span>
-							<span class="summary-value">{sampleEditSession.sourceName}</span>
+							<span class="summary-value">{sourceName}</span>
+							{sourcePath ? (
+								<span class="summary-subtext">{sourcePath}</span>
+							) : (
+								<span class="summary-subtext">Demo fixture video</span>
+							)}
 							<span class="summary-subtext">
 								Duration {formatTimestamp(duration)}
 							</span>
@@ -651,23 +857,15 @@ export function EditingWorkspace(handle: Handle) {
 									<span
 										class={classNames(
 											'status-pill',
-											previewReady
-												? previewPlaying
-													? 'status-pill--info'
-													: 'status-pill--success'
-												: 'status-pill--warning',
+											previewStatus.className,
 										)}
 									>
-										{previewReady
-											? previewPlaying
-												? 'Playing'
-												: 'Ready'
-											: 'Loading'}
+										{previewStatus.label}
 									</span>
 								</div>
 								<video
 									class="timeline-video-player"
-									src="/e2e-test.mp4"
+									src={previewUrl}
 									controls
 									preload="metadata"
 									connect={(node: HTMLVideoElement, signal) => {
@@ -678,6 +876,7 @@ export function EditingWorkspace(handle: Handle) {
 												? nextDuration
 												: 0
 											previewReady = previewDuration > 0
+											previewError = ''
 											syncVideoToPlayhead(playhead)
 											handle.update()
 										}
@@ -701,6 +900,12 @@ export function EditingWorkspace(handle: Handle) {
 											previewPlaying = false
 											handle.update()
 										}
+										const handleError = () => {
+											previewError = 'Unable to load the preview video.'
+											previewReady = false
+											previewPlaying = false
+											handle.update()
+										}
 										node.addEventListener(
 											'loadedmetadata',
 											handleLoadedMetadata,
@@ -708,6 +913,7 @@ export function EditingWorkspace(handle: Handle) {
 										node.addEventListener('timeupdate', handleTimeUpdate)
 										node.addEventListener('play', handlePlay)
 										node.addEventListener('pause', handlePause)
+										node.addEventListener('error', handleError)
 										signal.addEventListener('abort', () => {
 											node.removeEventListener(
 												'loadedmetadata',
@@ -716,6 +922,7 @@ export function EditingWorkspace(handle: Handle) {
 											node.removeEventListener('timeupdate', handleTimeUpdate)
 											node.removeEventListener('play', handlePlay)
 											node.removeEventListener('pause', handlePause)
+											node.removeEventListener('error', handleError)
 											if (previewNode === node) {
 												previewNode = null
 											}
@@ -728,6 +935,9 @@ export function EditingWorkspace(handle: Handle) {
 										Timeline {formatTimestamp(playhead)}
 									</span>
 								</div>
+								{previewError ? (
+									<p class="status-note status-note--danger">{previewError}</p>
+								) : null}
 							</div>
 							<div
 								class="timeline-track"
@@ -1202,13 +1412,21 @@ function buildTimelineTicks(duration: number, count: number) {
 	)
 }
 
-function buildCommandPreview(sourceName: string, chapters: ChapterPlan[]) {
+function buildCommandPreview(
+	sourceName: string,
+	chapters: ChapterPlan[],
+	sourcePath?: string,
+) {
 	const outputName =
 		chapters.find((chapter) => chapter.status !== 'skipped')?.outputName ??
 		'edited-output.mp4'
+	const inputPath =
+		typeof sourcePath === 'string' && sourcePath.trim().length > 0
+			? sourcePath
+			: sourceName
 	return [
 		'bun process-course/edits/cli.ts edit-video \\',
-		`  --input "${sourceName}" \\`,
+		`  --input "${inputPath}" \\`,
 		'  --transcript "transcript.json" \\',
 		'  --edited "transcript.txt" \\',
 		`  --output "${outputName}"`,

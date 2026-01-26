@@ -54,8 +54,14 @@ Start the Remix-powered UI shell (watch mode enabled):
 bun run app:start
 ```
 
-Then open `http://localhost:3000`. Use `-- --port` or `-- --host` to override
-the defaults.
+To preload a local video path for the UI:
+
+```bash
+bun run app:start -- --video-path "/path/to/video.mp4"
+```
+
+Then open `http://localhost:3000`. Use `-- --port`, `-- --host`, or
+`-- --video-path` to override the defaults.
 
 ## CLI Options
 
