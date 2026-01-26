@@ -26,6 +26,14 @@ const SHORTCUT_COLORS: Record<string, string> = {
 const ANSI_RESET = '\u001b[0m'
 const APP_ROOT = path.resolve(import.meta.dirname, '..')
 
+type ShortcutActions = {
+	open: () => void
+	restart: () => void
+	stop: () => void
+	help: () => void
+	spacing: () => void
+}
+
 function colorizeShortcut(key: string) {
 	if (!COLOR_ENABLED) {
 		return key
@@ -55,6 +63,7 @@ function getShortcutLines(url: string) {
 		`  ${colorizeShortcut('r')}: restart server`,
 		`  ${colorizeShortcut('q')}: quit server`,
 		`  ${colorizeShortcut('h')}: show shortcuts`,
+		`  ${colorizeShortcut('enter')}: add log spacing`,
 	]
 }
 
@@ -95,6 +104,50 @@ function openBrowser(url: string) {
 	}
 }
 
+export function createShortcutInputHandler(actions: ShortcutActions) {
+	let lastKey: string | null = null
+
+	const handleKey = (key: string) => {
+		if (key === '\u0003') {
+			actions.stop()
+			return
+		}
+		if (key === '\r' || key === '\n') {
+			actions.spacing()
+			return
+		}
+		const lower = key.toLowerCase()
+		if (lower === 'o') {
+			actions.open()
+			return
+		}
+		if (lower === 'r') {
+			actions.restart()
+			return
+		}
+		if (lower === 'q') {
+			actions.stop()
+			return
+		}
+		if (lower === 'h' || lower === '?') {
+			actions.help()
+		}
+	}
+
+	return {
+		handleInput: (input: string) => {
+			for (const key of input) {
+				if (key === '\n' && lastKey === '\r') {
+					lastKey = key
+					continue
+				}
+				handleKey(key)
+				lastKey = key
+			}
+		},
+	}
+}
+
 function setupShortcutHandling(options: {
 	getUrl: () => string
 	restart: () => void
@@ -105,34 +158,16 @@ function setupShortcutHandling(options: {
 	}
 
 	const stdin = process.stdin
-	const handleKey = (key: string) => {
-		if (key === '\u0003') {
-			options.stop()
-			return
-		}
-		const lower = key.toLowerCase()
-		if (lower === 'o') {
-			openBrowser(options.getUrl())
-			return
-		}
-		if (lower === 'r') {
-			options.restart()
-			return
-		}
-		if (lower === 'q') {
-			options.stop()
-			return
-		}
-		if (lower === 'h' || lower === '?') {
-			logShortcuts(options.getUrl())
-		}
-	}
+	const shortcutHandler = createShortcutInputHandler({
+		open: () => openBrowser(options.getUrl()),
+		restart: options.restart,
+		stop: options.stop,
+		help: () => logShortcuts(options.getUrl()),
+		spacing: () => console.log(''),
+	})
 
 	const onData = (chunk: Buffer | string) => {
-		const input = chunk.toString()
-		for (const key of input) {
-			handleKey(key)
-		}
+		shortcutHandler.handleInput(chunk.toString())
 	}
 
 	stdin.setRawMode(true)
