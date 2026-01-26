@@ -75,8 +75,7 @@ function parseTimestampInput(value: string) {
 	if (parts.length !== 2 && parts.length !== 3) return null
 	const secondsPart = Number.parseFloat(parts[parts.length - 1] ?? '')
 	const minutesPart = Number.parseFloat(parts[parts.length - 2] ?? '')
-	const hoursPart =
-		parts.length === 3 ? Number.parseFloat(parts[0] ?? '') : 0
+	const hoursPart = parts.length === 3 ? Number.parseFloat(parts[0] ?? '') : 0
 	if (
 		!Number.isFinite(secondsPart) ||
 		!Number.isFinite(minutesPart) ||
@@ -99,7 +98,9 @@ function classNames(...values: Array<string | false | null | undefined>) {
 export function TrimPoints(handle: Handle) {
 	const initialVideoPath = readInitialVideoPath()
 	let videoPathInput = initialVideoPath
-	let outputPathInput = initialVideoPath ? buildOutputPath(initialVideoPath) : ''
+	let outputPathInput = initialVideoPath
+		? buildOutputPath(initialVideoPath)
+		: ''
 	let pathStatus: 'idle' | 'loading' | 'ready' | 'error' = initialVideoPath
 		? 'loading'
 		: 'idle'
@@ -117,9 +118,11 @@ export function TrimPoints(handle: Handle) {
 	let trimRanges: TrimRangeWithId[] = []
 	let selectedRangeId: string | null = null
 	let rangeCounter = 1
-	let activeDrag:
-		| { rangeId: string; edge: 'start' | 'end'; pointerId: number }
-		| null = null
+	let activeDrag: {
+		rangeId: string
+		edge: 'start' | 'end'
+		pointerId: number
+	} | null = null
 	let runStatus: 'idle' | 'running' | 'success' | 'error' = 'idle'
 	let runProgress = 0
 	let runError = ''
@@ -202,8 +205,7 @@ export function TrimPoints(handle: Handle) {
 		const width = waveformNode.clientWidth
 		const height = waveformNode.clientHeight
 		if (width <= 0 || height <= 0) return
-		const dpr =
-			typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+		const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
 		waveformNode.width = Math.floor(width * dpr)
 		waveformNode.height = Math.floor(height * dpr)
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -271,17 +273,13 @@ export function TrimPoints(handle: Handle) {
 				audioBuffer.getChannelData(index),
 			)
 			const totalSamples = audioBuffer.length
-			const sampleCount = Math.max(
-				1,
-				Math.min(WAVEFORM_SAMPLES, totalSamples),
-			)
+			const sampleCount = Math.max(1, Math.min(WAVEFORM_SAMPLES, totalSamples))
 			const blockSize = Math.max(1, Math.floor(totalSamples / sampleCount))
 			const samples = new Array(sampleCount).fill(0)
 			let maxValue = 0
 			for (let i = 0; i < sampleCount; i++) {
 				const start = i * blockSize
-				const end =
-					i === sampleCount - 1 ? totalSamples : start + blockSize
+				const end = i === sampleCount - 1 ? totalSamples : start + blockSize
 				let peak = 0
 				for (let j = start; j < end; j++) {
 					let sum = 0
@@ -306,9 +304,7 @@ export function TrimPoints(handle: Handle) {
 			if (waveformSource !== fetchedUrl) return
 			waveformStatus = 'error'
 			waveformError =
-				error instanceof Error
-					? error.message
-					: 'Unable to render waveform.'
+				error instanceof Error ? error.message : 'Unable to render waveform.'
 			handle.update()
 		}
 	}
@@ -415,9 +411,7 @@ export function TrimPoints(handle: Handle) {
 		trimRanges = sortRanges(
 			trimRanges.map((range) => {
 				if (range.id !== rangeId) return range
-				let nextStart = Number.isFinite(patch.start)
-					? patch.start
-					: range.start
+				let nextStart = Number.isFinite(patch.start) ? patch.start : range.start
 				let nextEnd = Number.isFinite(patch.end) ? patch.end : range.end
 				if (edge === 'start') {
 					nextStart = clamp(
@@ -425,11 +419,7 @@ export function TrimPoints(handle: Handle) {
 						0,
 						Math.max(previewDuration - MIN_TRIM_LENGTH, 0),
 					)
-					nextEnd = clamp(
-						nextEnd,
-						nextStart + MIN_TRIM_LENGTH,
-						previewDuration,
-					)
+					nextEnd = clamp(nextEnd, nextStart + MIN_TRIM_LENGTH, previewDuration)
 				} else if (edge === 'end') {
 					nextEnd = clamp(nextEnd, MIN_TRIM_LENGTH, previewDuration)
 					nextStart = clamp(nextStart, 0, nextEnd - MIN_TRIM_LENGTH)
@@ -506,10 +496,8 @@ export function TrimPoints(handle: Handle) {
 		range: TrimRangeWithId,
 		edge: 'start' | 'end',
 	) => {
-		const isForward =
-			event.key === 'ArrowUp' || event.key === 'ArrowRight'
-		const isBackward =
-			event.key === 'ArrowDown' || event.key === 'ArrowLeft'
+		const isForward = event.key === 'ArrowUp' || event.key === 'ArrowRight'
+		const isBackward = event.key === 'ArrowDown' || event.key === 'ArrowLeft'
 		if (!isForward && !isBackward) return
 		event.preventDefault()
 		const step = event.shiftKey ? SHIFT_STEP : KEYBOARD_STEP
@@ -693,7 +681,9 @@ export function TrimPoints(handle: Handle) {
 			MIN_TRIM_LENGTH,
 		)
 		const commandPreview =
-			videoPathInput.trim() && outputPathInput.trim() && normalizedRanges.length > 0
+			videoPathInput.trim() &&
+			outputPathInput.trim() &&
+			normalizedRanges.length > 0
 				? buildFfmpegCommandPreview({
 						inputPath: videoPathInput.trim(),
 						outputPath: outputPathInput.trim(),
@@ -731,8 +721,8 @@ export function TrimPoints(handle: Handle) {
 						<div>
 							<h2>Video source</h2>
 							<p class="app-muted">
-								Load a local video file to calculate the trim timeline and output
-								command.
+								Load a local video file to calculate the trim timeline and
+								output command.
 							</p>
 						</div>
 						<span
@@ -938,7 +928,8 @@ export function TrimPoints(handle: Handle) {
 						</button>
 					</div>
 					<p class="app-muted trim-hint" id={hintId}>
-						Use arrow keys to nudge by {KEYBOARD_STEP}s. Hold Shift for {SHIFT_STEP}
+						Use arrow keys to nudge by {KEYBOARD_STEP}s. Hold Shift for{' '}
+						{SHIFT_STEP}
 						s.
 					</p>
 					<div
@@ -998,8 +989,7 @@ export function TrimPoints(handle: Handle) {
 									on={{
 										focus: () =>
 											syncVideoToTime(range.start, { updateInput: true }),
-										pointerdown: (event) =>
-											startDrag(event, range.id, 'start'),
+										pointerdown: (event) => startDrag(event, range.id, 'start'),
 										pointermove: moveDrag,
 										pointerup: endDrag,
 										pointercancel: endDrag,
@@ -1086,9 +1076,7 @@ export function TrimPoints(handle: Handle) {
 					<section class="app-card">
 						<div class="panel-header">
 							<h2>Trim ranges</h2>
-							<span class="summary-subtext">
-								{sortedRanges.length} total
-							</span>
+							<span class="summary-subtext">{sortedRanges.length} total</span>
 						</div>
 						{sortedRanges.length === 0 ? (
 							<p class="app-muted">
@@ -1211,9 +1199,7 @@ export function TrimPoints(handle: Handle) {
 							<div class="summary-item">
 								<span class="summary-label">Output length</span>
 								<span class="summary-value">
-									{previewReady
-										? formatTimestamp(outputDuration)
-										: '--:--.--'}
+									{previewReady ? formatTimestamp(outputDuration) : '--:--.--'}
 								</span>
 								<span class="summary-subtext">
 									{previewReady && duration > 0

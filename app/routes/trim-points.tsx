@@ -15,8 +15,8 @@ const trimPointsHandler = {
 						<span class="app-kicker">Eprec Studio</span>
 						<h1 class="app-title">Trim points</h1>
 						<p class="app-subtitle">
-							Add start and stop points, generate an ffmpeg trim command, and run
-							it with live progress.
+							Add start and stop points, generate an ffmpeg trim command, and
+							run it with live progress.
 						</p>
 						<nav class="app-nav">
 							<a class="app-link" href="/">Editing workspace</a>

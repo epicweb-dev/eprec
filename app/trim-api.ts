@@ -45,7 +45,10 @@ function parseRanges(ranges: unknown): TrimRange[] {
 		.map((entry) => {
 			if (!entry || typeof entry !== 'object') return null
 			const candidate = entry as TrimRange
-			if (!Number.isFinite(candidate.start) || !Number.isFinite(candidate.end)) {
+			if (
+				!Number.isFinite(candidate.start) ||
+				!Number.isFinite(candidate.end)
+			) {
 				return null
 			}
 			return { start: candidate.start, end: candidate.end }
@@ -178,9 +181,7 @@ export async function handleTrimRequest(request: Request): Promise<Response> {
 			let outTimeSeconds = 0
 			const send = (payload: Record<string, unknown>) => {
 				try {
-					controller.enqueue(
-						encoder.encode(`${JSON.stringify(payload)}\n`),
-					)
+					controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`))
 				} catch {
 					// stream closed
 				}
@@ -191,63 +192,63 @@ export async function handleTrimRequest(request: Request): Promise<Response> {
 				stderr: 'pipe',
 			})
 
-		request.signal.addEventListener('abort', () => {
-			try {
-				process.kill()
-			} catch {
-				// ignore
-			}
-		})
-
-		const stdoutReader = readLines(process.stdout, (line) => {
-			const [key, rawValue] = line.split('=')
-			const value = rawValue ?? ''
-			if (key === 'out_time_ms') {
-				const next = Number.parseFloat(value)
-				if (Number.isFinite(next)) outTimeSeconds = next / 1000
-			}
-			if (key === 'out_time_us') {
-				const next = Number.parseFloat(value)
-				if (Number.isFinite(next)) outTimeSeconds = next / 1000000
-			}
-			if (key === 'out_time') {
-				const parsed = parseOutTimeValue(value)
-				if (parsed !== null) outTimeSeconds = parsed
-			}
-			if (key === 'progress') {
-				const progress =
-					outputDurationSeconds > 0
-						? clamp(outTimeSeconds / outputDurationSeconds, 0, 1)
-						: 0
-				send({ type: 'progress', progress })
-				if (value === 'end') {
-					send({ type: 'progress', progress: 1 })
+			request.signal.addEventListener('abort', () => {
+				try {
+					process.kill()
+				} catch {
+					// ignore
 				}
-			}
-		})
+			})
 
-		const stderrReader = readLines(process.stderr, (line) => {
-			send({ type: 'log', message: line })
-		})
+			const stdoutReader = readLines(process.stdout, (line) => {
+				const [key, rawValue] = line.split('=')
+				const value = rawValue ?? ''
+				if (key === 'out_time_ms') {
+					const next = Number.parseFloat(value)
+					if (Number.isFinite(next)) outTimeSeconds = next / 1000
+				}
+				if (key === 'out_time_us') {
+					const next = Number.parseFloat(value)
+					if (Number.isFinite(next)) outTimeSeconds = next / 1000000
+				}
+				if (key === 'out_time') {
+					const parsed = parseOutTimeValue(value)
+					if (parsed !== null) outTimeSeconds = parsed
+				}
+				if (key === 'progress') {
+					const progress =
+						outputDurationSeconds > 0
+							? clamp(outTimeSeconds / outputDurationSeconds, 0, 1)
+							: 0
+					send({ type: 'progress', progress })
+					if (value === 'end') {
+						send({ type: 'progress', progress: 1 })
+					}
+				}
+			})
 
-		Promise.all([stdoutReader, stderrReader, process.exited])
-			.then(([, , exitCode]) => {
-				send({
-					type: 'done',
-					success: exitCode === 0,
-					exitCode,
+			const stderrReader = readLines(process.stderr, (line) => {
+				send({ type: 'log', message: line })
+			})
+
+			Promise.all([stdoutReader, stderrReader, process.exited])
+				.then(([, , exitCode]) => {
+					send({
+						type: 'done',
+						success: exitCode === 0,
+						exitCode,
+					})
 				})
-			})
-			.catch((error) => {
-				send({
-					type: 'done',
-					success: false,
-					error: error instanceof Error ? error.message : String(error),
+				.catch((error) => {
+					send({
+						type: 'done',
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
 				})
-			})
-			.finally(() => {
-				controller.close()
-			})
+				.finally(() => {
+					controller.close()
+				})
 		},
 	})
 
