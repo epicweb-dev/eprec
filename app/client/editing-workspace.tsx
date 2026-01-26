@@ -492,14 +492,18 @@ export function EditingWorkspace(handle: Handle) {
 		void requestQueue('/mark-done', { method: 'POST' })
 	}
 
+	const cancelActiveTask = (taskId: string) => {
+		void requestQueue(`/task/${encodeURIComponent(taskId)}`, {
+			method: 'DELETE',
+		})
+	}
+
 	const clearCompletedTasks = () => {
 		void requestQueue('/clear-completed', { method: 'POST' })
 	}
 
 	const removeTask = (taskId: string) => {
-		void requestQueue(`/task/${encodeURIComponent(taskId)}`, {
-			method: 'DELETE',
-		})
+		cancelActiveTask(taskId)
 	}
 
 	const syncVideoToPlayhead = (value: number) => {
@@ -767,6 +771,20 @@ export function EditingWorkspace(handle: Handle) {
 								Mark running done
 							</button>
 							<button
+								class="button button--danger"
+								type="button"
+								disabled={queueLoading || !runningTask}
+								on={{
+									click: () => {
+										if (runningTask) {
+											cancelActiveTask(runningTask.id)
+										}
+									},
+								}}
+							>
+								Cancel running
+							</button>
+							<button
 								class="button button--ghost"
 								type="button"
 								disabled={queueLoading || completedCount === 0}
@@ -980,6 +998,15 @@ export function EditingWorkspace(handle: Handle) {
 												<span class="summary-subtext">
 													{formatProcessingCategory(task.category)}
 												</span>
+												{task.status === 'running' ? (
+													<button
+														class="button button--danger"
+														type="button"
+														on={{ click: () => cancelActiveTask(task.id) }}
+													>
+														Cancel
+													</button>
+												) : null}
 												{task.status === 'queued' || task.status === 'error' ? (
 													<button
 														class="button button--ghost"
