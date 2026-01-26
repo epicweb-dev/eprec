@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { readdir, stat } from 'node:fs/promises'
 import searchPrompt from '@inquirer/search'
+import { matchSorter } from 'match-sorter'
 import inquirer from 'inquirer'
 import ora, { type Ora } from 'ora'
 
@@ -240,10 +241,6 @@ export function createPathPicker(prompter: Prompter): PathPicker {
 	}
 }
 
-function normalizeSearchValue(value: string) {
-	return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
-}
-
 function buildChoiceSearchText(choice: PromptChoice<unknown>) {
 	const parts = [
 		choice.name,
@@ -252,18 +249,16 @@ function buildChoiceSearchText(choice: PromptChoice<unknown>) {
 		typeof choice.value === 'string' ? choice.value : '',
 		...(choice.keywords ?? []),
 	].filter(Boolean)
-	return normalizeSearchValue(parts.join(' '))
+	return parts.join(' ')
 }
 
 function filterPromptChoices<T>(choices: PromptChoice<T>[], input?: string) {
-	const query = normalizeSearchValue(input ?? '')
-	if (!query) {
+	const query = input?.trim() ?? ''
+	if (query.length === 0) {
 		return choices
 	}
-	const tokens = query.split(' ').filter(Boolean)
-	return choices.filter((choice) => {
-		const haystack = buildChoiceSearchText(choice)
-		return tokens.every((token) => haystack.includes(token))
+	return matchSorter(choices, query, {
+		keys: [(choice) => buildChoiceSearchText(choice)],
 	})
 }
 

@@ -41,6 +41,7 @@
     "@inquirer/search": "^4.1.0",
     "get-port": "^7.1.0",
     "inquirer": "^13.2.1",
+    "match-sorter": "^8.2.0",
     "onnxruntime-node": "^1.23.2",
     "ora": "^9.1.0",
     "remix": "3.0.0-alpha.0",
