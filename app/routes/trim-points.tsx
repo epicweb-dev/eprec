@@ -40,7 +40,7 @@ const trimPointsHandler = {
 						<p class="app-muted">
 							Command output and progress details appear after you load a video.
 						</p>
-						<pre class="command-preview">Loading trim preview…</pre>
+						<pre class="command-preview">Loading trim preview...</pre>
 					</section>
 				</main>`,
 			}),
