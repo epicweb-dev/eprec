@@ -5,6 +5,7 @@
     "": {
       "name": "epic-recording",
       "dependencies": {
+        "@inquirer/search": "^4.1.0",
         "get-port": "^7.1.0",
         "inquirer": "^13.2.1",
         "onnxruntime-node": "^1.23.2",

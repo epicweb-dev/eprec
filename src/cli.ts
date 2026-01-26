@@ -235,33 +235,49 @@ function createCliUxContext(): CliUxContext {
 }
 
 async function promptForCommand(prompter: Prompter): Promise<string[] | null> {
-	const selection = await prompter.select('Choose a command', [
+	const selection = await prompter.search('Choose a command (type to filter)', [
 		{
 			name: 'Process chapters into separate files',
 			value: 'process',
+			description: 'process [input...]',
+			keywords: ['chapters', 'course', 'split', 'export'],
 		},
 		{
 			name: 'Edit a single video using transcript text edits',
 			value: 'edit',
+			description: 'edit --input <file> --transcript <json> --edited <txt>',
+			keywords: ['transcript', 'cuts', 'remove', 'trim'],
 		},
 		{
 			name: 'Combine two videos with speech-aligned padding',
 			value: 'combine',
+			description: 'combine --video1 <file> --video2 <file>',
+			keywords: ['merge', 'join', 'splice', 'padding'],
 		},
 		{
 			name: 'Start the web UI server',
 			value: 'app-start',
+			description: 'app start --port <number> --host <host>',
+			keywords: ['app', 'ui', 'server', 'web', 'dashboard'],
 		},
 		{
 			name: 'Transcribe a single audio/video file',
 			value: 'transcribe',
+			description: 'transcribe [input]',
+			keywords: ['whisper', 'speech', 'audio', 'subtitles'],
 		},
 		{
 			name: 'Show detected speech segments for a file',
 			value: 'detect-speech',
+			description: 'detect-speech [input]',
+			keywords: ['speech', 'vad', 'silence', 'segments'],
 		},
-		{ name: 'Show help', value: 'help' },
-		{ name: 'Exit', value: 'exit' },
+		{
+			name: 'Show help',
+			value: 'help',
+			keywords: ['usage', '--help'],
+		},
+		{ name: 'Exit', value: 'exit', keywords: ['quit', 'cancel'] },
 	])
 	switch (selection) {
 		case 'exit':

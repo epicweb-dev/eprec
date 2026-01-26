@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { readdir, stat } from 'node:fs/promises'
+import searchPrompt from '@inquirer/search'
 import inquirer from 'inquirer'
 import ora, { type Ora } from 'ora'
 
@@ -7,10 +8,13 @@ export type PromptChoice<T> = {
 	name: string
 	value: T
 	short?: string
+	description?: string
+	keywords?: string[]
 }
 
 export type Prompter = {
 	select<T>(message: string, choices: PromptChoice<T>[]): Promise<T>
+	search<T>(message: string, choices: PromptChoice<T>[]): Promise<T>
 	input(
 		message: string,
 		options?: {
@@ -122,6 +126,13 @@ export function createInquirerPrompter(): Prompter {
 			])
 			return result
 		},
+		async search<T>(message: string, choices: PromptChoice<T>[]) {
+			const result = await searchPrompt<T>({
+				message,
+				source: async (input) => filterPromptChoices(choices, input),
+			})
+			return result
+		},
 		async input(
 			message: string,
 			options?: {
@@ -165,21 +176,26 @@ type FileExplorerChoice =
 const DEFAULT_IGNORED_DIRS = new Set(['node_modules', '.git', '.cache'])
 
 export function createPathPicker(prompter: Prompter): PathPicker {
+	let lastDir: string | undefined
 	return {
 		async pickExistingFile(options) {
-			return promptForPath(prompter, {
+			const selectedPath = await promptForPath(prompter, {
 				kind: 'file',
 				message: options.message,
-				startDir: options.startDir,
+				startDir: options.startDir ?? lastDir,
 				extensions: options.extensions,
 			})
+			lastDir = path.dirname(selectedPath)
+			return selectedPath
 		},
 		async pickExistingDirectory(options) {
-			return promptForPath(prompter, {
+			const selectedPath = await promptForPath(prompter, {
 				kind: 'directory',
 				message: options.message,
-				startDir: options.startDir,
+				startDir: options.startDir ?? lastDir,
 			})
+			lastDir = selectedPath
+			return selectedPath
 		},
 		async pickOutputPath(options) {
 			const defaultPath = options.defaultPath
@@ -199,10 +215,13 @@ export function createPathPicker(prompter: Prompter): PathPicker {
 					validate: (value) =>
 						resolveOptionalString(value) ? true : 'Enter a file path.',
 				})
-				return path.resolve(manualPath)
+				const resolved = path.resolve(manualPath)
+				lastDir = path.dirname(resolved)
+				return resolved
 			}
 			const startDir =
 				options.startDir ??
+				lastDir ??
 				(defaultPath ? path.dirname(defaultPath) : process.cwd())
 			const directory = await promptForPath(prompter, {
 				kind: 'directory',
@@ -214,9 +233,38 @@ export function createPathPicker(prompter: Prompter): PathPicker {
 				defaultValue: defaultName,
 				validate: validateFileName,
 			})
-			return path.join(directory, fileName)
+			const outputPath = path.join(directory, fileName)
+			lastDir = directory
+			return outputPath
 		},
 	}
+}
+
+function normalizeSearchValue(value: string) {
+	return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function buildChoiceSearchText(choice: PromptChoice<unknown>) {
+	const parts = [
+		choice.name,
+		choice.short,
+		choice.description,
+		typeof choice.value === 'string' ? choice.value : '',
+		...(choice.keywords ?? []),
+	].filter(Boolean)
+	return normalizeSearchValue(parts.join(' '))
+}
+
+function filterPromptChoices<T>(choices: PromptChoice<T>[], input?: string) {
+	const query = normalizeSearchValue(input ?? '')
+	if (!query) {
+		return choices
+	}
+	const tokens = query.split(' ').filter(Boolean)
+	return choices.filter((choice) => {
+		const haystack = buildChoiceSearchText(choice)
+		return tokens.every((token) => haystack.includes(token))
+	})
 }
 
 function validateFileName(value: string) {
