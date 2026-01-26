@@ -357,17 +357,25 @@ if (import.meta.main) {
 async function promptForEditsCommand(
 	prompter: Prompter,
 ): Promise<string[] | null> {
-	const selection = await prompter.select('Choose a command', [
+	const selection = await prompter.search('Choose a command (type to filter)', [
 		{
-			name: 'Edit a single video using transcript text edits',
+			name: 'edit-video - Edit a single video using transcript text edits',
 			value: 'edit-video',
+			description: 'edit-video --input <file> --transcript <json> --edited <txt>',
+			keywords: ['transcript', 'cuts', 'remove', 'trim'],
 		},
 		{
-			name: 'Combine two videos with speech-aligned padding',
+			name: 'combine-videos - Combine two videos with speech-aligned padding',
 			value: 'combine-videos',
+			description: 'combine-videos --video1 <file> --video2 <file>',
+			keywords: ['merge', 'join', 'splice', 'padding'],
 		},
-		{ name: 'Show help', value: 'help' },
-		{ name: 'Exit', value: 'exit' },
+		{
+			name: '--help - Show help',
+			value: 'help',
+			keywords: ['usage', '--help'],
+		},
+		{ name: 'exit - Exit', value: 'exit', keywords: ['quit', 'cancel'] },
 	])
 	if (selection === 'exit') {
 		return null
