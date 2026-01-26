@@ -6,6 +6,7 @@ import { getEnv } from '../app/config/env.ts'
 import { createAppRouter } from '../app/router.tsx'
 import { handleVideoRequest } from '../app/video-api.ts'
 import { createBundlingRoutes } from '../server/bundling.ts'
+import { handleProcessingQueueRequest } from '../server/processing-queue.ts'
 
 type AppServerOptions = {
 	host?: string
@@ -195,6 +196,9 @@ function startServer(port: number, hostname: string) {
 				const url = new URL(request.url)
 				if (url.pathname === '/api/video') {
 					return await handleVideoRequest(request)
+				}
+				if (url.pathname.startsWith('/api/processing-queue')) {
+					return await handleProcessingQueueRequest(request)
 				}
 				return await router.fetch(request)
 			} catch (error) {
