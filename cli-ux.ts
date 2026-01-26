@@ -291,10 +291,14 @@ async function promptForPath(
 	let currentDir = await resolveStartDir(options.startDir)
 	while (true) {
 		const choices = await buildExplorerChoices(currentDir, options)
-		const selection = await prompter.select(
+		const rawSelection = (await prompter.select(
 			`${options.message} (${currentDir})`,
 			choices,
-		)
+		)) as FileExplorerChoice | string
+		const selection = resolveExplorerSelection(rawSelection, choices)
+		if (!selection) {
+			continue
+		}
 		switch (selection.kind) {
 			case 'up':
 				currentDir = path.dirname(currentDir)
@@ -419,6 +423,26 @@ async function buildExplorerChoices(
 	choices.push({ name: 'Enter path manually', value: { kind: 'manual' } })
 	choices.push({ name: 'Cancel', value: { kind: 'cancel' } })
 	return choices
+}
+
+function resolveExplorerSelection(
+	selection: FileExplorerChoice | string,
+	choices: PromptChoice<FileExplorerChoice>[],
+) {
+	if (typeof selection !== 'string') {
+		return selection
+	}
+	const matched = choices.find((choice) => {
+		if (choice.name === selection) {
+			return true
+		}
+		const value = choice.value
+		if (value && typeof value === 'object' && 'path' in value) {
+			return value.path === selection
+		}
+		return false
+	})
+	return matched?.value ?? null
 }
 
 function matchesExtensions(name: string, extensions?: string[]) {
