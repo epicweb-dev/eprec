@@ -4,6 +4,7 @@ import '../app/config/init-env.ts'
 import getPort from 'get-port'
 import { getEnv } from '../app/config/env.ts'
 import { createAppRouter } from '../app/router.tsx'
+import { handleTrimRequest } from '../app/trim-api.ts'
 import { handleVideoRequest } from '../app/video-api.ts'
 import { createBundlingRoutes } from '../server/bundling.ts'
 import { handleProcessingQueueRequest } from '../server/processing-queue.ts'
@@ -196,6 +197,9 @@ function startServer(port: number, hostname: string) {
 				const url = new URL(request.url)
 				if (url.pathname === '/api/video') {
 					return await handleVideoRequest(request)
+				}
+				if (url.pathname === '/api/trim') {
+					return await handleTrimRequest(request)
 				}
 				if (url.pathname.startsWith('/api/processing-queue')) {
 					return await handleProcessingQueueRequest(request)

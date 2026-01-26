@@ -5,6 +5,7 @@ import { Layout } from './components/layout.tsx'
 import routes from './config/routes.ts'
 import { render } from './helpers/render.ts'
 import indexHandlers from './routes/index.tsx'
+import trimPointsHandlers from './routes/trim-points.tsx'
 
 const STATIC_CORS_HEADERS = {
 	'Access-Control-Allow-Origin': '*',
@@ -100,6 +101,11 @@ export function createAppRouter(rootDir: string) {
 	router.map(routes.index, {
 		middleware: indexHandlers.middleware,
 		action: indexHandlers.loader,
+	})
+
+	router.map(routes.trimPoints, {
+		middleware: trimPointsHandlers.middleware,
+		action: trimPointsHandlers.loader,
 	})
 
 	return router

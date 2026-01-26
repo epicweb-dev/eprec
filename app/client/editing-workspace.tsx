@@ -492,14 +492,18 @@ export function EditingWorkspace(handle: Handle) {
 		void requestQueue('/mark-done', { method: 'POST' })
 	}
 
+	const cancelActiveTask = (taskId: string) => {
+		void requestQueue(`/task/${encodeURIComponent(taskId)}`, {
+			method: 'DELETE',
+		})
+	}
+
 	const clearCompletedTasks = () => {
 		void requestQueue('/clear-completed', { method: 'POST' })
 	}
 
 	const removeTask = (taskId: string) => {
-		void requestQueue(`/task/${encodeURIComponent(taskId)}`, {
-			method: 'DELETE',
-		})
+		cancelActiveTask(taskId)
 	}
 
 	const syncVideoToPlayhead = (value: number) => {
@@ -601,6 +605,11 @@ export function EditingWorkspace(handle: Handle) {
 						Review transcript-based edits, refine command windows, and prepare
 						the final CLI export in one place.
 					</p>
+					<nav class="app-nav">
+						<a class="app-link" href="/trim-points">
+							Trim points
+						</a>
+					</nav>
 				</header>
 
 				<section class="app-card app-card--full source-card">
@@ -760,6 +769,20 @@ export function EditingWorkspace(handle: Handle) {
 								on={{ click: markActiveDone }}
 							>
 								Mark running done
+							</button>
+							<button
+								class="button button--danger"
+								type="button"
+								disabled={queueLoading || !runningTask}
+								on={{
+									click: () => {
+										if (runningTask) {
+											cancelActiveTask(runningTask.id)
+										}
+									},
+								}}
+							>
+								Cancel running
 							</button>
 							<button
 								class="button button--ghost"
@@ -975,6 +998,15 @@ export function EditingWorkspace(handle: Handle) {
 												<span class="summary-subtext">
 													{formatProcessingCategory(task.category)}
 												</span>
+												{task.status === 'running' ? (
+													<button
+														class="button button--danger"
+														type="button"
+														on={{ click: () => cancelActiveTask(task.id) }}
+													>
+														Cancel
+													</button>
+												) : null}
 												{task.status === 'queued' || task.status === 'error' ? (
 													<button
 														class="button button--ghost"
