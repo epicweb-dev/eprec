@@ -361,7 +361,8 @@ async function promptForEditsCommand(
 		{
 			name: 'edit-video - Edit a single video using transcript text edits',
 			value: 'edit-video',
-			description: 'edit-video --input <file> --transcript <json> --edited <txt>',
+			description:
+				'edit-video --input <file> --transcript <json> --edited <txt>',
 			keywords: ['transcript', 'cuts', 'remove', 'trim'],
 		},
 		{
