@@ -235,6 +235,7 @@ export function TrimPoints(handle: Handle) {
 		waveformSamples = []
 		drawWaveform()
 		handle.update()
+		const fetchedUrl = url
 		try {
 			if (typeof window === 'undefined' || !('AudioContext' in window)) {
 				throw new Error('AudioContext unavailable in this browser.')
@@ -288,12 +289,14 @@ export function TrimPoints(handle: Handle) {
 			}
 			const normalizedSamples =
 				maxValue > 0 ? samples.map((sample) => sample / maxValue) : samples
+			if (waveformSource !== fetchedUrl) return
 			waveformSamples = normalizedSamples
 			waveformStatus = 'ready'
 			handle.update()
 			drawWaveform()
 		} catch (error) {
 			if (handle.signal.aborted) return
+			if (waveformSource !== fetchedUrl) return
 			waveformStatus = 'error'
 			waveformError =
 				error instanceof Error
@@ -659,10 +662,10 @@ export function TrimPoints(handle: Handle) {
 		if (runController) {
 			runController.abort()
 			runController = null
+			runStatus = 'error'
+			runError = 'Run canceled.'
+			handle.update()
 		}
-		runStatus = 'error'
-		runError = 'Run canceled.'
-		handle.update()
 	}
 
 	return () => {
