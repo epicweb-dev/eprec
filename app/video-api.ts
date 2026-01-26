@@ -2,11 +2,28 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const VIDEO_ROUTE = '/api/video'
-const VIDEO_CORS_HEADERS = {
-	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-	'Access-Control-Allow-Headers': 'Accept, Content-Type, Range',
-} as const
+
+function isLocalhostOrigin(origin: string | null): boolean {
+	if (!origin) return false
+	try {
+		const url = new URL(origin)
+		const hostname = url.hostname.toLowerCase()
+		return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+	} catch {
+		return false
+	}
+}
+
+function getVideoCorsHeaders(origin: string | null) {
+	if (!isLocalhostOrigin(origin)) {
+		return {}
+	}
+	return {
+		'Access-Control-Allow-Origin': origin,
+		'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+		'Access-Control-Allow-Headers': 'Accept, Content-Type, Range',
+	}
+}
 
 type ByteRange = { start: number; end: number }
 
@@ -60,13 +77,13 @@ function parseRangeHeader(
 	return { start, end: rangeEnd }
 }
 
-function buildVideoHeaders(contentType: string, length: number) {
+function buildVideoHeaders(contentType: string, length: number, origin: string | null) {
 	return {
 		'Content-Type': contentType,
 		'Content-Length': String(length),
 		'Accept-Ranges': 'bytes',
 		'Cache-Control': 'no-cache',
-		...VIDEO_CORS_HEADERS,
+		...getVideoCorsHeaders(origin),
 	}
 }
 
@@ -76,11 +93,14 @@ export async function handleVideoRequest(request: Request): Promise<Response> {
 		return new Response('Not Found', { status: 404 })
 	}
 
+	const origin = request.headers.get('origin')
+	const corsHeaders = getVideoCorsHeaders(origin)
+
 	if (request.method === 'OPTIONS') {
 		return new Response(null, {
 			status: 204,
 			headers: {
-				...VIDEO_CORS_HEADERS,
+				...corsHeaders,
 				'Access-Control-Max-Age': '86400',
 			},
 		})
@@ -89,7 +109,7 @@ export async function handleVideoRequest(request: Request): Promise<Response> {
 	if (request.method !== 'GET' && request.method !== 'HEAD') {
 		return new Response('Method Not Allowed', {
 			status: 405,
-			headers: VIDEO_CORS_HEADERS,
+			headers: corsHeaders,
 		})
 	}
 
@@ -98,7 +118,7 @@ export async function handleVideoRequest(request: Request): Promise<Response> {
 	if (!filePath) {
 		return new Response('Missing or invalid path query.', {
 			status: 400,
-			headers: VIDEO_CORS_HEADERS,
+			headers: corsHeaders,
 		})
 	}
 
@@ -106,7 +126,7 @@ export async function handleVideoRequest(request: Request): Promise<Response> {
 	if (!(await file.exists())) {
 		return new Response('Video file not found.', {
 			status: 404,
-			headers: VIDEO_CORS_HEADERS,
+			headers: corsHeaders,
 		})
 	}
 
@@ -120,7 +140,7 @@ export async function handleVideoRequest(request: Request): Promise<Response> {
 				status: 416,
 				headers: {
 					'Content-Range': `bytes */${size}`,
-					...VIDEO_CORS_HEADERS,
+					...corsHeaders,
 				},
 			})
 		}
@@ -130,12 +150,12 @@ export async function handleVideoRequest(request: Request): Promise<Response> {
 			status: 206,
 			headers: {
 				'Content-Range': `bytes ${range.start}-${range.end}/${size}`,
-				...buildVideoHeaders(contentType, length),
+				...buildVideoHeaders(contentType, length, origin),
 			},
 		})
 	}
 
 	return new Response(request.method === 'HEAD' ? null : file, {
-		headers: buildVideoHeaders(contentType, size),
+		headers: buildVideoHeaders(contentType, size, origin),
 	})
 }
