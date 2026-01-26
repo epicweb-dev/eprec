@@ -188,7 +188,6 @@ p {
 	grid-template-columns: repeat(auto-fit, minmax(var(--card-min-width), 1fr));
 }
 
-
 .app-card {
 	background: var(--color-surface);
 	border-radius: var(--radius-xl);

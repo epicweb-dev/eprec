@@ -21,9 +21,7 @@ const indexHandler = {
 					</header>
 					<section class="app-card app-card--full">
 						<h2>Source video</h2>
-						<p class="app-muted">
-							Paste a video file path once the UI loads.
-						</p>
+						<p class="app-muted">Paste a video file path once the UI loads.</p>
 					</section>
 					<section class="app-card app-card--full">
 						<h2>Processing actions</h2>

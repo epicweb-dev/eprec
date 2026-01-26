@@ -8,7 +8,11 @@ function isLocalhostOrigin(origin: string | null): boolean {
 	try {
 		const url = new URL(origin)
 		const hostname = url.hostname.toLowerCase()
-		return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+		return (
+			hostname === 'localhost' ||
+			hostname === '127.0.0.1' ||
+			hostname === '[::1]'
+		)
 	} catch {
 		return false
 	}
@@ -71,13 +75,16 @@ function parseRangeHeader(
 		return { start: rangeStart, end: size - 1 }
 	}
 
-	const rangeEnd =
-		end === null || end >= size ? Math.max(size - 1, 0) : end
+	const rangeEnd = end === null || end >= size ? Math.max(size - 1, 0) : end
 	if (start > rangeEnd) return null
 	return { start, end: rangeEnd }
 }
 
-function buildVideoHeaders(contentType: string, length: number, origin: string | null) {
+function buildVideoHeaders(
+	contentType: string,
+	length: number,
+	origin: string | null,
+) {
 	return {
 		'Content-Type': contentType,
 		'Content-Length': String(length),

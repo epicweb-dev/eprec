@@ -466,11 +466,7 @@ export function EditingWorkspace(handle: Handle) {
 			primaryChapterId.length > 0 &&
 			secondaryChapterId.length > 0 &&
 			primaryChapterId !== secondaryChapterId
-		const commandPreview = buildCommandPreview(
-			sourceName,
-			chapters,
-			sourcePath,
-		)
+		const commandPreview = buildCommandPreview(sourceName, chapters, sourcePath)
 		const previewTime =
 			previewReady && previewDuration > 0
 				? (playhead / duration) * previewDuration
@@ -524,8 +520,7 @@ export function EditingWorkspace(handle: Handle) {
 									value={videoPathInput}
 									on={{
 										input: (event) => {
-											const target =
-												event.currentTarget as HTMLInputElement
+											const target = event.currentTarget as HTMLInputElement
 											updateVideoPathInput(target.value)
 										},
 									}}
@@ -854,10 +849,7 @@ export function EditingWorkspace(handle: Handle) {
 										</span>
 									</div>
 									<span
-										class={classNames(
-											'status-pill',
-											previewStatus.className,
-										)}
+										class={classNames('status-pill', previewStatus.className)}
 									>
 										{previewStatus.label}
 									</span>
