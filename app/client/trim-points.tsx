@@ -443,9 +443,13 @@ export function TrimPoints(handle: Handle) {
 				handle.update()
 			}
 		} catch (error) {
-			runStatus = 'error'
-			runError =
-				error instanceof Error ? error.message : 'Unable to run ffmpeg.'
+			if (runController === null) {
+				// Cancellation already set the error message, don't overwrite it
+			} else {
+				runStatus = 'error'
+				runError =
+					error instanceof Error ? error.message : 'Unable to run ffmpeg.'
+			}
 			handle.update()
 		} finally {
 			runController = null
