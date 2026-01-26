@@ -1416,12 +1416,19 @@ function buildCommandPreview(
 			? sourcePath
 			: sourceName
 	return [
-		'bun process-course/edits/cli.ts edit-video \\',
-		`  --input "${inputPath}" \\`,
-		'  --transcript "transcript.json" \\',
-		'  --edited "transcript.txt" \\',
-		`  --output "${outputName}"`,
+		'eprec edit \\',
+		`  --input ${escapeShellArg(inputPath)} \\`,
+		`  --transcript ${escapeShellArg('transcript.json')} \\`,
+		`  --edited ${escapeShellArg('transcript.txt')} \\`,
+		`  --output ${escapeShellArg(outputName)}`,
 	].join('\n')
+}
+
+function escapeShellArg(value: string) {
+	if (value.length === 0) {
+		return "''"
+	}
+	return `'${value.replace(/'/g, "'\"'\"'")}'`
 }
 
 function findPreviousCut(cutRanges: CutRange[], playhead: number) {
