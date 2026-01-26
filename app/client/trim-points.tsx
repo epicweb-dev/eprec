@@ -132,6 +132,13 @@ export function TrimPoints(handle: Handle) {
 	let waveformSource = ''
 	let waveformNode: HTMLCanvasElement | null = null
 
+	// Cleanup ffmpeg operation on unmount
+	handle.signal.addEventListener('abort', () => {
+		if (runController) {
+			runController.abort()
+		}
+	})
+
 	const updateVideoPathInput = (value: string) => {
 		videoPathInput = value
 		if (pathError) pathError = ''
@@ -370,7 +377,7 @@ export function TrimPoints(handle: Handle) {
 	}
 
 	const addTrimRange = () => {
-		if (!previewReady || previewDuration <= 0) {
+		if (!previewReady || previewDuration <= MIN_TRIM_LENGTH) {
 			pathError = 'Load a video before adding trim ranges.'
 			pathStatus = 'error'
 			handle.update()
