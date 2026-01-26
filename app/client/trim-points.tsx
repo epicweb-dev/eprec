@@ -155,6 +155,9 @@ export function TrimPoints(handle: Handle) {
 		previewReady = false
 		previewError = ''
 		previewDuration = 0
+		trimRanges = []
+		selectedRangeId = null
+		activeDrag = null
 	}
 
 	const syncVideoToTime = (
