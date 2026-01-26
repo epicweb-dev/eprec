@@ -42,7 +42,6 @@ function extractVideoName(value: string) {
 	return last && last.length > 0 ? last : value
 }
 
-
 type ProcessingStatus = 'queued' | 'running' | 'done'
 type ProcessingCategory = 'chapter' | 'transcript' | 'export'
 type ProcessingTask = {

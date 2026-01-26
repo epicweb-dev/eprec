@@ -117,10 +117,6 @@
 		--spacing-section: var(--spacing-2xl);
 		--card-min-width: 220px;
 	}
-
-	.source-grid {
-		grid-template-columns: 1fr;
-	}
 }
 
 @media (max-width: 640px) {
@@ -261,7 +257,6 @@ p {
 	flex-wrap: wrap;
 	gap: var(--spacing-sm);
 }
-
 .status-note {
 	margin: 0;
 	padding: var(--spacing-sm) var(--spacing-md);
