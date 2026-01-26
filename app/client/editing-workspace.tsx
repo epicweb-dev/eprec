@@ -396,8 +396,7 @@ export function EditingWorkspace(handle: Handle) {
 			if (!response.ok) {
 				throw new Error(`Queue request failed (${response.status}).`)
 			}
-			const snapshot =
-				(await response.json()) as ProcessingQueueSnapshot
+			const snapshot = (await response.json()) as ProcessingQueueSnapshot
 			applyQueueSnapshot(snapshot)
 		} catch (error) {
 			if (handle.signal.aborted) return
@@ -736,10 +735,7 @@ export function EditingWorkspace(handle: Handle) {
 							<div class="summary-item">
 								<span class="summary-label">Stream</span>
 								<span
-									class={classNames(
-										'status-pill',
-										queueStreamMeta.className,
-									)}
+									class={classNames('status-pill', queueStreamMeta.className)}
 								>
 									{queueStreamMeta.label}
 								</span>
@@ -943,14 +939,10 @@ export function EditingWorkspace(handle: Handle) {
 												<span
 													class={classNames(
 														'status-pill',
-														task.status === 'queued' &&
-															'status-pill--info',
-														task.status === 'running' &&
-															'status-pill--warning',
-														task.status === 'done' &&
-															'status-pill--success',
-														task.status === 'error' &&
-															'status-pill--danger',
+														task.status === 'queued' && 'status-pill--info',
+														task.status === 'running' && 'status-pill--warning',
+														task.status === 'done' && 'status-pill--success',
+														task.status === 'error' && 'status-pill--danger',
 													)}
 												>
 													{task.status}
@@ -983,8 +975,7 @@ export function EditingWorkspace(handle: Handle) {
 												<span class="summary-subtext">
 													{formatProcessingCategory(task.category)}
 												</span>
-												{task.status === 'queued' ||
-												task.status === 'error' ? (
+												{task.status === 'queued' || task.status === 'error' ? (
 													<button
 														class="button button--ghost"
 														type="button"

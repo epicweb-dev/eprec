@@ -63,7 +63,11 @@ const TASK_STEPS: Record<ProcessingAction, string[]> = {
 		'Refining command windows',
 		'Updating cut ranges',
 	],
-	'render-preview': ['Rendering preview clip', 'Optimizing output', 'Verifying'],
+	'render-preview': [
+		'Rendering preview clip',
+		'Optimizing output',
+		'Verifying',
+	],
 	'export-final': [
 		'Rendering chapters',
 		'Packaging exports',
@@ -102,9 +106,7 @@ function updateQueueState(mutate: () => void) {
 function updateTask(taskId: string, patch: Partial<ProcessingTask>) {
 	updateQueueState(() => {
 		tasks = tasks.map((task) =>
-			task.id === taskId
-				? { ...task, ...patch, updatedAt: Date.now() }
-				: task,
+			task.id === taskId ? { ...task, ...patch, updatedAt: Date.now() } : task,
 		)
 	})
 }
@@ -172,8 +174,7 @@ function markActiveDone() {
 }
 
 function buildProgress(step: number, totalSteps: number, label: string) {
-	const percent =
-		totalSteps > 0 ? Math.round((step / totalSteps) * 100) : 0
+	const percent = totalSteps > 0 ? Math.round((step / totalSteps) * 100) : 0
 	return { step, totalSteps, label, percent }
 }
 
@@ -227,8 +228,7 @@ async function runTask(task: ProcessingTask) {
 			if (failAtStep && index + 1 === failAtStep) {
 				throw new Error('Processing failed during render.')
 			}
-			const delay =
-				STEP_DELAY_MS + Math.round(Math.random() * STEP_JITTER_MS)
+			const delay = STEP_DELAY_MS + Math.round(Math.random() * STEP_JITTER_MS)
 			await sleep(delay, controller.signal)
 		}
 		updateTask(task.id, {
