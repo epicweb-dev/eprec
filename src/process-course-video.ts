@@ -10,6 +10,7 @@ import { writeJarvisLogs, writeSummaryLogs } from '../process-course/summary'
 import {
 	processChapter,
 	type ChapterProcessingOptions,
+	type ChapterProgressReporter,
 } from '../process-course/chapter-processor'
 import type {
 	JarvisEdit,
@@ -20,6 +21,7 @@ import type {
 } from '../process-course/types'
 import { formatSeconds } from './utils'
 import { checkSegmentHasSpeech } from './speech-detection'
+import { setActiveSpinnerText } from '../cli-ux'
 
 interface ProcessingSummary {
 	totalSelected: number
@@ -34,6 +36,140 @@ interface ProcessingSummary {
 }
 
 export type ProcessCourseOptions = Omit<CliArgs, 'shouldExit'>
+
+const PROGRESS_BAR_WIDTH = 12
+
+type SpinnerProgressContext = {
+	fileIndex: number
+	fileCount: number
+	fileName: string
+	chapterCount: number
+}
+
+type ChapterProgressContext = {
+	chapterIndex: number
+	chapterTitle: string
+}
+
+function clampProgress(value: number) {
+	return Math.max(0, Math.min(1, value))
+}
+
+function formatPercent(value: number) {
+	return `${Math.round(clampProgress(value) * 100)}%`
+}
+
+function formatProgressBar(value: number, width = PROGRESS_BAR_WIDTH) {
+	const clamped = clampProgress(value)
+	const filled = Math.round(clamped * width)
+	return `[${'#'.repeat(filled)}${'-'.repeat(width - filled)}]`
+}
+
+function truncateLabel(value: string, maxLength: number) {
+	const trimmed = value.trim()
+	if (trimmed.length <= maxLength) {
+		return trimmed
+	}
+	return `${trimmed.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
+function buildProgressText(params: {
+	fileIndex: number
+	fileCount: number
+	fileName: string
+	chapterIndex: number
+	chapterCount: number
+	chapterTitle: string
+	stepIndex: number
+	stepCount: number
+	stepLabel: string
+}) {
+	const chapterProgress =
+		params.stepCount > 0 ? params.stepIndex / params.stepCount : 0
+	const fileProgress =
+		params.chapterCount > 0
+			? (params.chapterIndex - 1 + chapterProgress) / params.chapterCount
+			: 1
+	const fileLabel =
+		params.fileCount > 1
+			? `File ${params.fileIndex}/${params.fileCount}`
+			: 'File'
+	const fileName = truncateLabel(params.fileName, 22)
+	const fileSegment = fileName ? `${fileLabel} ${fileName}` : fileLabel
+	const chapterLabel = `Chapter ${params.chapterIndex}/${params.chapterCount}`
+	const chapterTitle = truncateLabel(params.chapterTitle, 26)
+	const chapterSegment = chapterTitle
+		? `${chapterLabel} ${chapterTitle}`
+		: chapterLabel
+	const stepSegment = truncateLabel(params.stepLabel, 28) || 'Working'
+	return `Processing course | ${fileSegment} ${formatPercent(fileProgress)} ${formatProgressBar(fileProgress)} | ${chapterSegment} ${formatPercent(chapterProgress)} ${formatProgressBar(chapterProgress)} | ${stepSegment}`
+}
+
+function createSpinnerProgressReporter(context: SpinnerProgressContext) {
+	const chapterCount = Math.max(1, context.chapterCount)
+	return {
+		createChapterProgress({
+			chapterIndex,
+			chapterTitle,
+		}: ChapterProgressContext) {
+			let stepIndex = 0
+			let stepCount = 1
+			let stepLabel = 'Starting'
+
+			const normalizeStepCount = (value: number) =>
+				Math.max(1, Math.round(value))
+
+			const update = () => {
+				setActiveSpinnerText(
+					buildProgressText({
+						fileIndex: context.fileIndex,
+						fileCount: context.fileCount,
+						fileName: context.fileName,
+						chapterIndex,
+						chapterCount,
+						chapterTitle,
+						stepIndex,
+						stepCount,
+						stepLabel,
+					}),
+				)
+			}
+
+			const progress: ChapterProgressReporter = {
+				start({ stepCount: initialCount, label }) {
+					stepCount = normalizeStepCount(initialCount)
+					stepIndex = 0
+					stepLabel = label ?? 'Starting'
+					update()
+				},
+				step(label) {
+					stepCount = normalizeStepCount(stepCount)
+					stepIndex = Math.min(stepIndex + 1, stepCount)
+					stepLabel = label
+					update()
+				},
+				setLabel(label) {
+					stepLabel = label
+					update()
+				},
+				finish(label) {
+					stepCount = normalizeStepCount(stepCount)
+					stepIndex = stepCount
+					stepLabel = label ?? 'Complete'
+					update()
+				},
+				skip(label) {
+					stepCount = normalizeStepCount(stepCount)
+					stepIndex = stepCount
+					stepLabel = label
+					update()
+				},
+			}
+
+			return progress
+		},
+	}
+}
 
 export async function runProcessCourse(options: ProcessCourseOptions) {
 	const {
@@ -53,7 +189,7 @@ export async function runProcessCourse(options: ProcessCourseOptions) {
 	await ensureFfmpegAvailable()
 
 	// Process each input file in turn
-	for (const inputPath of inputPaths) {
+	for (const [fileIndex, inputPath] of inputPaths.entries()) {
 		// Determine output directory for this file
 		let fileOutputDir: string
 		if (outputDir) {
@@ -72,6 +208,8 @@ export async function runProcessCourse(options: ProcessCourseOptions) {
 		}
 
 		await processInputFile({
+			fileIndex: fileIndex + 1,
+			fileCount: inputPaths.length,
 			inputPath,
 			outputDir: fileOutputDir,
 			minChapterDurationSeconds,
@@ -97,6 +235,8 @@ export async function runProcessCourseCli(rawArgs?: string[]) {
 }
 
 async function processInputFile(options: {
+	fileIndex: number
+	fileCount: number
 	inputPath: string
 	outputDir: string
 	minChapterDurationSeconds: number
@@ -110,6 +250,8 @@ async function processInputFile(options: {
 	whisperBinaryPath: string | undefined
 }) {
 	const {
+		fileIndex,
+		fileCount,
 		inputPath,
 		outputDir,
 		minChapterDurationSeconds,
@@ -168,6 +310,13 @@ async function processInputFile(options: {
 		? chapters.filter((chapter) => chapterIndexes.includes(chapter.index))
 		: chapters
 
+	const progressReporter = createSpinnerProgressReporter({
+		fileIndex,
+		fileCount,
+		fileName: path.basename(inputPath),
+		chapterCount: selectedChapters.length,
+	})
+
 	const summary: ProcessingSummary = {
 		totalSelected: selectedChapters.length,
 		processed: 0,
@@ -203,7 +352,11 @@ async function processInputFile(options: {
 	const processedChaptersWithSpeech: ProcessedChapterInfo[] = []
 	let previousProcessedChapter: ProcessedChapterInfo | null = null
 
-	for (const chapter of selectedChapters) {
+	for (const [chapterOffset, chapter] of selectedChapters.entries()) {
+		const chapterProgress = progressReporter.createChapterProgress({
+			chapterIndex: chapterOffset + 1,
+			chapterTitle: chapter.title,
+		})
 		// Determine which chapter to combine with
 		// Always use the most recent processed chapter with speech (if any)
 		const chapterToCombineWith: ProcessedChapterInfo | null =
@@ -222,6 +375,7 @@ async function processInputFile(options: {
 		const result = await processChapter(chapter, {
 			...processingOptions,
 			previousProcessedChapter: chapterToCombineWith,
+			progress: chapterProgress,
 		})
 
 		// Update summary based on result

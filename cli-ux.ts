@@ -85,6 +85,12 @@ export function resumeActiveSpinner() {
 	}
 }
 
+export function setActiveSpinnerText(text: string) {
+	if (activeSpinner) {
+		activeSpinner.text = text
+	}
+}
+
 export async function withSpinner<T>(
 	text: string,
 	action: () => Promise<T>,
