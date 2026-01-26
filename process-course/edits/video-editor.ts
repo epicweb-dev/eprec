@@ -11,6 +11,7 @@ import {
 } from './timestamp-refinement'
 import type { TimeRange } from '../types'
 import type { TranscriptJson, TranscriptWordWithIndex } from './types'
+import type { StepProgressReporter } from '../../progress-reporter'
 
 export interface EditVideoOptions {
 	inputPath: string
@@ -18,6 +19,7 @@ export interface EditVideoOptions {
 	editedTextPath: string
 	outputPath: string
 	paddingMs?: number
+	progress?: StepProgressReporter
 }
 
 export interface EditVideoResult {
@@ -37,8 +39,13 @@ export async function editVideo(
 	options: EditVideoOptions,
 ): Promise<EditVideoResult> {
 	try {
+		const progress = options.progress
+		const totalSteps = 5
+		progress?.start({ stepCount: totalSteps, label: 'Loading transcript' })
+
 		const transcript = await readTranscriptJson(options.transcriptJsonPath)
 		const editedText = await Bun.file(options.editedTextPath).text()
+		progress?.step('Validating edits')
 		const validation = validateEditedTranscript({
 			originalWords: transcript.words,
 			editedText,
@@ -51,6 +58,7 @@ export async function editVideo(
 				removedRanges: [],
 			}
 		}
+		progress?.step('Diffing transcript')
 		const diffResult = diffTranscripts({
 			originalWords: transcript.words,
 			editedText,
@@ -64,9 +72,12 @@ export async function editVideo(
 			}
 		}
 
+		progress?.step('Planning edits')
 		const removedWords = diffResult.removedWords
 		if (removedWords.length === 0) {
+			progress?.step('Rendering output')
 			await ensureOutputCopy(options.inputPath, options.outputPath)
+			progress?.finish('No edits')
 			return {
 				success: true,
 				outputPath: options.outputPath,
@@ -77,7 +88,9 @@ export async function editVideo(
 
 		const removalRanges = wordsToTimeRanges(removedWords)
 		if (removalRanges.length === 0) {
+			progress?.step('Rendering output')
 			await ensureOutputCopy(options.inputPath, options.outputPath)
+			progress?.finish('No ranges')
 			return {
 				success: true,
 				outputPath: options.outputPath,
@@ -86,6 +99,7 @@ export async function editVideo(
 			}
 		}
 
+		progress?.setLabel('Refining ranges')
 		const refinedRanges = await refineAllRemovalRanges({
 			inputPath: options.inputPath,
 			duration: transcript.source_duration,
@@ -111,6 +125,7 @@ export async function editVideo(
 			}
 		}
 
+		progress?.step('Rendering output')
 		await mkdir(path.dirname(options.outputPath), { recursive: true })
 
 		const isFullRange =
@@ -120,6 +135,7 @@ export async function editVideo(
 			keepRanges[0].end >= transcript.source_duration - 0.001
 		if (isFullRange) {
 			await ensureOutputCopy(options.inputPath, options.outputPath)
+			progress?.finish('Complete')
 			return {
 				success: true,
 				outputPath: options.outputPath,
@@ -129,12 +145,14 @@ export async function editVideo(
 		}
 
 		if (keepRanges.length === 1 && keepRanges[0]) {
+			progress?.setLabel('Extracting segment')
 			await extractChapterSegmentAccurate({
 				inputPath: options.inputPath,
 				outputPath: options.outputPath,
 				start: keepRanges[0].start,
 				end: keepRanges[0].end,
 			})
+			progress?.finish('Complete')
 			return {
 				success: true,
 				outputPath: options.outputPath,
@@ -147,6 +165,9 @@ export async function editVideo(
 		try {
 			const segmentPaths: string[] = []
 			for (const [index, range] of keepRanges.entries()) {
+				progress?.setLabel(
+					`Extracting segment ${index + 1}/${keepRanges.length}`,
+				)
 				const segmentPath = path.join(tempDir, `segment-${index + 1}.mp4`)
 				await extractChapterSegmentAccurate({
 					inputPath: options.inputPath,
@@ -156,10 +177,12 @@ export async function editVideo(
 				})
 				segmentPaths.push(segmentPath)
 			}
+			progress?.setLabel('Concatenating segments')
 			await concatSegments({
 				segmentPaths,
 				outputPath: options.outputPath,
 			})
+			progress?.finish('Complete')
 			return {
 				success: true,
 				outputPath: options.outputPath,

@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { runCommand } from './utils'
+import type { StepProgressReporter } from '../progress-reporter'
 
 const DEFAULT_MODEL_FILENAME = 'ggml-small.en.bin'
 const DEFAULT_MODEL_URL =
@@ -14,6 +15,7 @@ type TranscribeOptions = {
 	threads?: number
 	binaryPath?: string
 	outputBasePath?: string
+	progress?: StepProgressReporter
 }
 
 export type TranscriptSegment = {
@@ -36,6 +38,7 @@ export async function transcribeAudio(
 	audioPath: string,
 	options: TranscribeOptions = {},
 ): Promise<TranscriptionResult> {
+	const progress = options.progress
 	const resolvedAudioPath = path.resolve(audioPath)
 	const resolvedModelPath = path.resolve(
 		options.modelPath ?? getDefaultWhisperModelPath(),
@@ -49,7 +52,9 @@ export async function transcribeAudio(
 			`${path.parse(resolvedAudioPath).name}-transcript`,
 		)
 
-	await ensureModelFile(resolvedModelPath)
+	const totalSteps = 3
+	progress?.start({ stepCount: totalSteps, label: 'Checking model' })
+	await ensureModelFile(resolvedModelPath, progress)
 
 	const args = [
 		binaryPath,
@@ -69,17 +74,23 @@ export async function transcribeAudio(
 		args.push('-t', String(options.threads))
 	}
 
+	progress?.step('Transcribing audio')
 	const result = await runCommand(args)
+	progress?.step('Reading output')
 	const transcriptPath = `${outputBasePath}.txt`
 	const transcript = await readTranscriptText(transcriptPath, result.stdout)
 	const { segments, source } = await readTranscriptSegments(
 		`${outputBasePath}.json`,
 	)
 	const normalized = normalizeTranscriptText(transcript)
+	progress?.finish('Complete')
 	return { text: normalized, segments, segmentsSource: source }
 }
 
-async function ensureModelFile(modelPath: string) {
+async function ensureModelFile(
+	modelPath: string,
+	progress?: StepProgressReporter,
+) {
 	const file = Bun.file(modelPath)
 	if (await file.exists()) {
 		return
@@ -90,6 +101,7 @@ async function ensureModelFile(modelPath: string) {
 		throw new Error(`Whisper model not found at ${modelPath}.`)
 	}
 
+	progress?.setLabel('Downloading model')
 	await mkdir(path.dirname(modelPath), { recursive: true })
 	const response = await fetch(DEFAULT_MODEL_URL)
 	if (!response.ok) {

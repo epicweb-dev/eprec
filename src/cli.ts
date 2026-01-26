@@ -27,6 +27,7 @@ import {
 	PromptCancelled,
 	createInquirerPrompter,
 	createPathPicker,
+	createStepProgressReporter,
 	isInteractive,
 	pauseActiveSpinner,
 	resumeActiveSpinner,
@@ -151,18 +152,33 @@ async function main(rawArgs = hideBin(process.argv)) {
 					}),
 			async (argv) => {
 				const transcribeArgs = await resolveTranscribeArgs(argv, context)
+				const progress = context.interactive
+					? createStepProgressReporter({ action: 'Transcribing audio' })
+					: undefined
 				let resultText = ''
 				await withSpinner(
 					'Transcribing audio',
 					async () => {
-						const result = await transcribeAudio(transcribeArgs.inputPath, {
-							modelPath: transcribeArgs.modelPath,
-							language: transcribeArgs.language,
-							threads: transcribeArgs.threads,
-							binaryPath: transcribeArgs.binaryPath,
-							outputBasePath: transcribeArgs.outputBasePath,
+						setLogHooks({
+							beforeLog: pauseActiveSpinner,
+							afterLog: resumeActiveSpinner,
 						})
-						resultText = result.text
+						try {
+							const result = await transcribeAudio(
+								transcribeArgs.inputPath,
+								{
+									modelPath: transcribeArgs.modelPath,
+									language: transcribeArgs.language,
+									threads: transcribeArgs.threads,
+									binaryPath: transcribeArgs.binaryPath,
+									outputBasePath: transcribeArgs.outputBasePath,
+									progress,
+								},
+							)
+							resultText = result.text
+						} finally {
+							setLogHooks({})
+						}
 					},
 					{
 						successText: 'Transcription complete',
@@ -198,16 +214,28 @@ async function main(rawArgs = hideBin(process.argv)) {
 					argv,
 					context,
 				)
+				const progress = context.interactive
+					? createStepProgressReporter({ action: 'Detecting speech' })
+					: undefined
 				let segments: unknown = []
 				await withSpinner(
 					'Detecting speech',
 					async () => {
-						await ensureFfmpegAvailable()
-						segments = await detectSpeechSegmentsForFile({
-							inputPath,
-							start,
-							end,
+						setLogHooks({
+							beforeLog: pauseActiveSpinner,
+							afterLog: resumeActiveSpinner,
 						})
+						try {
+							await ensureFfmpegAvailable()
+							segments = await detectSpeechSegmentsForFile({
+								inputPath,
+								start,
+								end,
+								progress,
+							})
+						} finally {
+							setLogHooks({})
+						}
 					},
 					{
 						successText: 'Speech detection complete',

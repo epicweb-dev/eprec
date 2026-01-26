@@ -7,14 +7,18 @@ import {
 	PromptCancelled,
 	createInquirerPrompter,
 	createPathPicker,
+	createStepProgressReporter,
 	isInteractive,
+	pauseActiveSpinner,
 	resolveOptionalString,
+	resumeActiveSpinner,
 	type PathPicker,
 	type Prompter,
 	withSpinner,
 } from '../../cli-ux'
 import { editVideo, buildEditedOutputPath } from './video-editor'
 import { combineVideos } from './combined-video-editor'
+import { setLogHooks } from '../logging'
 
 export type EditVideoCommandArgs = {
 	input: string
@@ -176,21 +180,33 @@ function resolvePaddingMs(value: unknown) {
 export function createEditVideoHandler(options: CliUxOptions): CommandHandler {
 	return async (argv) => {
 		const args = await resolveEditVideoArgs(argv, options)
+		const progress = options.interactive
+			? createStepProgressReporter({ action: 'Editing video' })
+			: undefined
 		await withSpinner(
 			'Editing video',
 			async () => {
-				const result = await editVideo({
-					inputPath: String(args.input),
-					transcriptJsonPath: String(args.transcript),
-					editedTextPath: String(args.edited),
-					outputPath: String(args.output),
-					paddingMs: args['padding-ms'],
+				setLogHooks({
+					beforeLog: pauseActiveSpinner,
+					afterLog: resumeActiveSpinner,
 				})
-				if (!result.success) {
-					throw new Error(result.error ?? 'Edit failed.')
+				try {
+					const result = await editVideo({
+						inputPath: String(args.input),
+						transcriptJsonPath: String(args.transcript),
+						editedTextPath: String(args.edited),
+						outputPath: String(args.output),
+						paddingMs: args['padding-ms'],
+						progress,
+					})
+					if (!result.success) {
+						throw new Error(result.error ?? 'Edit failed.')
+					}
+				} finally {
+					setLogHooks({})
 				}
 			},
-			{ successText: 'Edit complete' },
+			{ successText: 'Edit complete', enabled: options.interactive },
 		)
 		console.log(`Edited video written to ${args.output}`)
 	}
@@ -201,26 +217,47 @@ export function createCombineVideosHandler(
 ): CommandHandler {
 	return async (argv) => {
 		const args = await resolveCombineVideosArgs(argv, options)
+		const progress = options.interactive
+			? createStepProgressReporter({ action: 'Combining videos' })
+			: undefined
+		const editProgressFactory = options.interactive
+			? (detail: string) =>
+					createStepProgressReporter({
+						action: 'Combining videos',
+						detail,
+						maxLabelLength: 28,
+					})
+			: undefined
 		let outputPath = ''
 		await withSpinner(
 			'Combining videos',
 			async () => {
-				const result = await combineVideos({
-					video1Path: String(args.video1),
-					video1TranscriptJsonPath: args.transcript1,
-					video1EditedTextPath: args.edited1,
-					video2Path: String(args.video2),
-					video2TranscriptJsonPath: args.transcript2,
-					video2EditedTextPath: args.edited2,
-					outputPath: String(args.output),
-					overlapPaddingMs: args['padding-ms'],
+				setLogHooks({
+					beforeLog: pauseActiveSpinner,
+					afterLog: resumeActiveSpinner,
 				})
-				if (!result.success) {
-					throw new Error(result.error ?? 'Combine failed.')
+				try {
+					const result = await combineVideos({
+						video1Path: String(args.video1),
+						video1TranscriptJsonPath: args.transcript1,
+						video1EditedTextPath: args.edited1,
+						video2Path: String(args.video2),
+						video2TranscriptJsonPath: args.transcript2,
+						video2EditedTextPath: args.edited2,
+						outputPath: String(args.output),
+						overlapPaddingMs: args['padding-ms'],
+						progress,
+						editProgressFactory,
+					})
+					if (!result.success) {
+						throw new Error(result.error ?? 'Combine failed.')
+					}
+					outputPath = result.outputPath
+				} finally {
+					setLogHooks({})
 				}
-				outputPath = result.outputPath
 			},
-			{ successText: 'Combine complete' },
+			{ successText: 'Combine complete', enabled: options.interactive },
 		)
 		console.log(`Combined video written to ${outputPath}`)
 	}

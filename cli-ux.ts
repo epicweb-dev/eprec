@@ -4,6 +4,7 @@ import searchPrompt from '@inquirer/search'
 import { matchSorter } from 'match-sorter'
 import inquirer from 'inquirer'
 import ora, { type Ora } from 'ora'
+import type { StepProgressReporter } from './progress-reporter'
 
 export type PromptChoice<T> = {
 	name: string
@@ -88,6 +89,83 @@ export function resumeActiveSpinner() {
 export function setActiveSpinnerText(text: string) {
 	if (activeSpinner) {
 		activeSpinner.text = text
+	}
+}
+
+const STEP_PROGRESS_BAR_WIDTH = 12
+const STEP_PROGRESS_LABEL_MAX = 32
+const STEP_PROGRESS_DETAIL_MAX = 26
+const STEP_PROGRESS_ACTION_MAX = 24
+
+function clampProgress(value: number) {
+	return Math.max(0, Math.min(1, value))
+}
+
+function formatPercent(value: number) {
+	return `${Math.round(clampProgress(value) * 100)}%`
+}
+
+function formatProgressBar(value: number, width = STEP_PROGRESS_BAR_WIDTH) {
+	const clamped = clampProgress(value)
+	const filled = Math.round(clamped * width)
+	return `[${'#'.repeat(filled)}${'-'.repeat(width - filled)}]`
+}
+
+function truncateLabel(value: string, maxLength: number) {
+	const trimmed = value.trim()
+	if (trimmed.length <= maxLength) {
+		return trimmed
+	}
+	return `${trimmed.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
+export function createStepProgressReporter(options: {
+	action: string
+	detail?: string
+	maxLabelLength?: number
+}): StepProgressReporter {
+	let stepIndex = 0
+	let stepCount = 1
+	let stepLabel = 'Starting'
+	const actionLabel = truncateLabel(options.action, STEP_PROGRESS_ACTION_MAX)
+
+	const update = () => {
+		const progress = stepCount > 0 ? stepIndex / stepCount : 0
+		const detail = options.detail
+			? ` | ${truncateLabel(options.detail, STEP_PROGRESS_DETAIL_MAX)}`
+			: ''
+		const label = truncateLabel(
+			stepLabel,
+			options.maxLabelLength ?? STEP_PROGRESS_LABEL_MAX,
+		)
+		setActiveSpinnerText(
+			`${actionLabel}${detail} | ${formatPercent(progress)} ${formatProgressBar(progress)} | ${label || 'Working'}`,
+		)
+	}
+
+	return {
+		start({ stepCount: initialCount, label }) {
+			stepCount = Math.max(1, Math.round(initialCount))
+			stepIndex = 0
+			stepLabel = label ?? 'Starting'
+			update()
+		},
+		step(label) {
+			stepCount = Math.max(1, Math.round(stepCount))
+			stepIndex = Math.min(stepIndex + 1, stepCount)
+			stepLabel = label
+			update()
+		},
+		setLabel(label) {
+			stepLabel = label
+			update()
+		},
+		finish(label) {
+			stepCount = Math.max(1, Math.round(stepCount))
+			stepIndex = stepCount
+			stepLabel = label ?? 'Complete'
+			update()
+		},
 	}
 }
 
