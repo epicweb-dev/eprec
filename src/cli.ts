@@ -108,6 +108,10 @@ async function main(rawArgs = hideBin(process.argv)) {
 					.option('host', {
 						type: 'string',
 						describe: 'Host to bind for the app server',
+					})
+					.option('video-path', {
+						type: 'string',
+						describe: 'Default input video path for the app UI',
 					}),
 			async (argv) => {
 				const port =
@@ -115,7 +119,8 @@ async function main(rawArgs = hideBin(process.argv)) {
 						? argv.port
 						: undefined
 				const host = resolveOptionalString(argv.host)
-				await startAppServer({ port, host })
+				const videoPath = resolveOptionalString(argv['video-path'])
+				await startAppServer({ port, host, videoPath })
 			},
 		)
 		.command(

@@ -5,10 +5,12 @@ export function Layout({
 	children,
 	title = 'Eprec Studio',
 	entryScript = '/app/client/entry.tsx',
+	appConfig,
 }: {
 	children?: SafeHtml
 	title?: string
 	entryScript?: string | false
+	appConfig?: Record<string, unknown>
 }) {
 	const importmap = { imports: baseImportMap }
 	const importmapJson = JSON.stringify(importmap)
@@ -16,6 +18,13 @@ export function Layout({
 	const modulePreloads = Object.values(baseImportMap).map((value) => {
 		return html`<link rel="modulepreload" href="${value}" />`
 	})
+	const appConfigJson = appConfig ? JSON.stringify(appConfig) : null
+	const appConfigScript = appConfigJson
+		? html.raw`<script>window.__EPREC_APP__=${appConfigJson.replace(
+				/</g,
+				'\\u003c',
+			)}</script>`
+		: ''
 
 	return html`<html lang="en">
 		<head>
@@ -27,6 +36,7 @@ export function Layout({
 		</head>
 		<body>
 			<div id="root">${children ?? ''}</div>
+			${appConfigScript}
 			${entryScript
 				? html`<script type="module" src="${entryScript}"></script>`
 				: ''}

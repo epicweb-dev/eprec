@@ -4,11 +4,13 @@ import '../app/config/init-env.ts'
 import getPort from 'get-port'
 import { getEnv } from '../app/config/env.ts'
 import { createAppRouter } from '../app/router.tsx'
+import { handleVideoRequest } from '../app/video-api.ts'
 import { createBundlingRoutes } from '../server/bundling.ts'
 
 type AppServerOptions = {
 	host?: string
 	port?: number
+	videoPath?: string
 }
 
 const LOCALHOST_ALIASES = new Set(['127.0.0.1', '::1', 'localhost'])
@@ -155,6 +157,10 @@ function startServer(port: number, hostname: string) {
 		routes: createBundlingRoutes(APP_ROOT),
 		async fetch(request) {
 			try {
+				const url = new URL(request.url)
+				if (url.pathname === '/api/video') {
+					return await handleVideoRequest(request)
+				}
 				return await router.fetch(request)
 			} catch (error) {
 				console.error(error)
@@ -178,6 +184,9 @@ async function getServerPort(nodeEnv: string, desiredPort: number) {
 }
 
 export async function startAppServer(options: AppServerOptions = {}) {
+	if (options.videoPath) {
+		process.env.EPREC_APP_VIDEO_PATH = options.videoPath.trim()
+	}
 	const env = getEnv()
 	const host = options.host ?? env.HOST
 	const desiredPort = options.port ?? env.PORT
