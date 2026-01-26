@@ -169,17 +169,14 @@ async function main(rawArgs = hideBin(process.argv)) {
 							afterLog: resumeActiveSpinner,
 						})
 						try {
-							const result = await transcribeAudio(
-								transcribeArgs.inputPath,
-								{
-									modelPath: transcribeArgs.modelPath,
-									language: transcribeArgs.language,
-									threads: transcribeArgs.threads,
-									binaryPath: transcribeArgs.binaryPath,
-									outputBasePath: transcribeArgs.outputBasePath,
-									progress,
-								},
-							)
+							const result = await transcribeAudio(transcribeArgs.inputPath, {
+								modelPath: transcribeArgs.modelPath,
+								language: transcribeArgs.language,
+								threads: transcribeArgs.threads,
+								binaryPath: transcribeArgs.binaryPath,
+								outputBasePath: transcribeArgs.outputBasePath,
+								progress,
+							})
 							resultText = result.text
 						} finally {
 							setLogHooks({})
