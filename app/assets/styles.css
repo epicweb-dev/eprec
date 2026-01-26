@@ -199,6 +199,34 @@ p {
 	gap: var(--spacing-md);
 }
 
+.stacked-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.stacked-item {
+	border-radius: 0;
+}
+
+.stacked-item:first-child {
+	border-top-left-radius: var(--radius-lg);
+	border-top-right-radius: var(--radius-lg);
+}
+
+.stacked-item:last-child {
+	border-bottom-left-radius: var(--radius-lg);
+	border-bottom-right-radius: var(--radius-lg);
+}
+
+.stacked-item.is-selected {
+	background: var(--color-info-surface);
+	box-shadow: inset 0 0 0 1px var(--color-border-accent);
+}
+
 .app-list {
 	margin: 0;
 	padding-left: var(--spacing-lg);
@@ -294,6 +322,93 @@ p {
 	font-size: var(--font-size-sm);
 	color: var(--color-text-muted);
 	line-height: 1.4;
+}
+
+.actions-card {
+	gap: var(--spacing-xl);
+}
+
+.actions-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--spacing-lg);
+}
+
+.actions-meta {
+	min-width: 180px;
+}
+
+.actions-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--spacing-sm);
+}
+
+.actions-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: var(--spacing-lg);
+}
+
+.actions-panel {
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-lg);
+	padding: var(--spacing-lg);
+	background: var(--color-surface-muted);
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-md);
+}
+
+.actions-button-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--spacing-sm);
+}
+
+.actions-queue {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-md);
+}
+
+.processing-list .stacked-item {
+	background: var(--color-surface);
+}
+
+.processing-row {
+	border: 1px solid var(--color-border);
+}
+
+.processing-row-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--spacing-md);
+	padding: var(--spacing-md) var(--spacing-md) var(--spacing-sm);
+}
+
+.processing-row-header h4 {
+	margin: 0 0 var(--spacing-xs);
+	font-size: var(--font-size-base);
+}
+
+.processing-row-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--spacing-md);
+	padding: 0 var(--spacing-md) var(--spacing-md);
+}
+
+.processing-row.is-running {
+	box-shadow: inset 0 0 0 1px var(--color-warning-border);
+}
+
+.processing-row.is-complete {
+	background: var(--color-success-surface);
 }
 
 .timeline-card {
@@ -540,7 +655,7 @@ p {
 	margin: 0;
 	display: flex;
 	flex-direction: column;
-	gap: var(--spacing-sm);
+	gap: 0;
 }
 
 .cut-row {
@@ -549,14 +664,14 @@ p {
 	gap: var(--spacing-md);
 	justify-content: space-between;
 	border: 1px solid var(--color-border);
-	border-radius: var(--radius-lg);
+	border-radius: 0;
 	padding: var(--spacing-sm) var(--spacing-md);
 	background: var(--color-surface-muted);
 }
 
 .cut-row.is-selected {
-	border-color: var(--color-border-accent);
 	background: var(--color-info-surface);
+	box-shadow: inset 0 0 0 1px var(--color-border-accent);
 }
 
 .cut-select {
@@ -591,13 +706,13 @@ p {
 .command-list {
 	display: flex;
 	flex-direction: column;
-	gap: var(--spacing-md);
+	gap: 0;
 }
 
 .chapter-row,
 .command-row {
 	border: 1px solid var(--color-border);
-	border-radius: var(--radius-lg);
+	border-radius: 0;
 	padding: var(--spacing-md);
 	background: var(--color-surface-muted);
 	display: flex;
@@ -673,16 +788,22 @@ p {
 	list-style: none;
 	margin: 0;
 	padding: 0;
-	display: grid;
-	gap: var(--spacing-sm);
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+
+.transcript-results .stacked-item {
+	border: 1px solid var(--color-border);
+	background: var(--color-surface);
 }
 
 .transcript-result {
 	width: 100%;
-	border: 1px solid var(--color-border);
-	border-radius: var(--radius-md);
 	padding: var(--spacing-sm) var(--spacing-md);
-	background: var(--color-surface);
+	border: none;
+	border-radius: 0;
+	background: transparent;
 	display: grid;
 	grid-template-columns: auto 1fr;
 	gap: var(--spacing-md);
@@ -711,6 +832,10 @@ p {
 	font-size: var(--font-size-sm);
 	line-height: 1.5;
 	overflow-x: auto;
+}
+
+.stacked-list .stacked-item + .stacked-item {
+	border-top: none;
 }
 
 @keyframes shimmer {

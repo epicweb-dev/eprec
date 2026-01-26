@@ -6,4 +6,5 @@ export const baseImportMap = {
 	'remix/component/jsx-runtime': '/node_modules/remix/component/jsx-runtime',
 	'remix/component/jsx-dev-runtime':
 		'/node_modules/remix/component/jsx-dev-runtime',
+	'match-sorter': '/node_modules/match-sorter',
 } as const

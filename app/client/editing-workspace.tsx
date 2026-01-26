@@ -1,3 +1,4 @@
+import { matchSorter } from 'match-sorter'
 import type { Handle } from 'remix/component'
 import {
 	sampleEditSession,
@@ -12,15 +13,34 @@ const MIN_CUT_LENGTH = 0.2
 const DEFAULT_CUT_LENGTH = 2.4
 const PLAYHEAD_STEP = 0.1
 
+type ProcessingStatus = 'queued' | 'running' | 'done'
+type ProcessingCategory = 'chapter' | 'transcript' | 'export'
+type ProcessingTask = {
+	id: string
+	title: string
+	detail: string
+	status: ProcessingStatus
+	category: ProcessingCategory
+}
+
 export function EditingWorkspace(handle: Handle) {
 	const duration = sampleEditSession.duration
 	const transcript = sampleEditSession.transcript
 	const commands = sampleEditSession.commands
+	const transcriptIndex = transcript.map((word) => ({
+		...word,
+		context: buildContext(transcript, word.index, 3),
+	}))
 	let cutRanges = sampleEditSession.cuts.map((range) => ({ ...range }))
 	let chapters = sampleEditSession.chapters.map((chapter) => ({ ...chapter }))
 	let playhead = 18.2
 	let selectedRangeId = cutRanges[0]?.id ?? null
 	let searchQuery = ''
+	let primaryChapterId = chapters[0]?.id ?? ''
+	let secondaryChapterId = chapters[1]?.id ?? chapters[0]?.id ?? ''
+	let processingQueue: ProcessingTask[] = []
+	let activeTaskId: string | null = null
+	let processingCount = 1
 	let manualCutId = 1
 	let previewDuration = 0
 	let previewReady = false
@@ -144,6 +164,128 @@ export function EditingWorkspace(handle: Handle) {
 		handle.update()
 	}
 
+	const findChapter = (chapterId: string) =>
+		chapters.find((chapter) => chapter.id === chapterId) ?? null
+
+	const updatePrimaryChapter = (chapterId: string) => {
+		primaryChapterId = chapterId
+		if (secondaryChapterId === chapterId) {
+			secondaryChapterId =
+				chapters.find((chapter) => chapter.id !== chapterId)?.id ??
+				chapterId
+		}
+		handle.update()
+	}
+
+	const updateSecondaryChapter = (chapterId: string) => {
+		secondaryChapterId = chapterId
+		handle.update()
+	}
+
+	const queueTask = (
+		title: string,
+		detail: string,
+		category: ProcessingCategory,
+	) => {
+		const task: ProcessingTask = {
+			id: `task-${processingCount++}`,
+			title,
+			detail,
+			status: 'queued',
+			category,
+		}
+		processingQueue = [...processingQueue, task]
+		handle.update()
+	}
+
+	const queueChapterEdit = () => {
+		const chapter = findChapter(primaryChapterId)
+		if (!chapter) return
+		queueTask(
+			`Edit ${chapter.title}`,
+			`Review trims for ${formatTimestamp(chapter.start)} - ${formatTimestamp(
+				chapter.end,
+			)}.`,
+			'chapter',
+		)
+	}
+
+	const queueCombineChapters = () => {
+		const primary = findChapter(primaryChapterId)
+		const secondary = findChapter(secondaryChapterId)
+		if (!primary || !secondary || primary.id === secondary.id) return
+		queueTask(
+			`Combine ${primary.title} + ${secondary.title}`,
+			'Merge both chapters into a single preview export.',
+			'chapter',
+		)
+	}
+
+	const queueTranscriptRegeneration = () => {
+		queueTask(
+			'Regenerate transcript',
+			'Run Whisper alignment and refresh search cues.',
+			'transcript',
+		)
+	}
+
+	const queueCommandScan = () => {
+		queueTask(
+			'Detect command windows',
+			'Scan for Jarvis commands and update cut ranges.',
+			'transcript',
+		)
+	}
+
+	const queuePreviewRender = () => {
+		queueTask(
+			'Render preview clip',
+			'Bake a short MP4 with current edits applied.',
+			'export',
+		)
+	}
+
+	const queueFinalExport = () => {
+		queueTask(
+			'Export edited chapters',
+			'Render final chapters and write the export package.',
+			'export',
+		)
+	}
+
+	const startNextTask = () => {
+		if (activeTaskId) return
+		const next = processingQueue.find((task) => task.status === 'queued')
+		if (!next) return
+		activeTaskId = next.id
+		processingQueue = processingQueue.map((task) =>
+			task.id === next.id ? { ...task, status: 'running' } : task,
+		)
+		handle.update()
+	}
+
+	const markActiveDone = () => {
+		if (!activeTaskId) return
+		processingQueue = processingQueue.map((task) =>
+			task.id === activeTaskId ? { ...task, status: 'done' } : task,
+		)
+		activeTaskId = null
+		handle.update()
+	}
+
+	const clearCompletedTasks = () => {
+		processingQueue = processingQueue.filter((task) => task.status !== 'done')
+		handle.update()
+	}
+
+	const removeTask = (taskId: string) => {
+		processingQueue = processingQueue.filter((task) => task.id !== taskId)
+		if (activeTaskId === taskId) {
+			activeTaskId = null
+		}
+		handle.update()
+	}
+
 	const syncVideoToPlayhead = (value: number) => {
 		if (
 			!previewNode ||
@@ -179,12 +321,24 @@ export function EditingWorkspace(handle: Handle) {
 		const currentContext = currentWord
 			? buildContext(transcript, currentWord.index, 4)
 			: 'No transcript cues found for the playhead.'
-		const query = searchQuery.trim().toLowerCase()
+		const query = searchQuery.trim()
 		const searchResults = query
-			? transcript
-					.filter((word) => word.word.toLowerCase().includes(query))
-					.slice(0, 12)
+			? matchSorter(transcriptIndex, query, {
+					keys: ['word'],
+				}).slice(0, 12)
 			: []
+		const queuedCount = processingQueue.filter(
+			(task) => task.status === 'queued',
+		).length
+		const completedCount = processingQueue.filter(
+			(task) => task.status === 'done',
+		).length
+		const runningTask =
+			processingQueue.find((task) => task.status === 'running') ?? null
+		const canCombineChapters =
+			primaryChapterId.length > 0 &&
+			secondaryChapterId.length > 0 &&
+			primaryChapterId !== secondaryChapterId
 		const commandPreview = buildCommandPreview(
 			sampleEditSession.sourceName,
 			chapters,
@@ -243,6 +397,227 @@ export function EditingWorkspace(handle: Handle) {
 								applied
 							</span>
 						</div>
+					</div>
+				</section>
+
+				<section class="app-card app-card--full actions-card">
+					<div class="actions-header">
+						<div>
+							<h2>Processing actions</h2>
+							<p class="app-muted">
+								Queue chapter edits, transcript cleanup, and export jobs directly
+								from the workspace.
+							</p>
+						</div>
+						<div class="actions-meta">
+							<div class="summary-item">
+								<span class="summary-label">Queue</span>
+								<span class="summary-value">{queuedCount} queued</span>
+								<span class="summary-subtext">
+									{runningTask ? `Running: ${runningTask.title}` : 'Idle'}
+								</span>
+							</div>
+						</div>
+						<div class="actions-buttons">
+							<button
+								class="button button--primary"
+								type="button"
+								disabled={queuedCount === 0 || Boolean(runningTask)}
+								on={{ click: startNextTask }}
+							>
+								Run next
+							</button>
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!runningTask}
+								on={{ click: markActiveDone }}
+							>
+								Mark running done
+							</button>
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={completedCount === 0}
+								on={{ click: clearCompletedTasks }}
+							>
+								Clear completed
+							</button>
+						</div>
+					</div>
+
+					<div class="actions-grid">
+						<article class="actions-panel">
+							<div class="panel-header">
+								<h3>Chapter processing</h3>
+								<span class="status-pill status-pill--info">Chapter</span>
+							</div>
+							<label class="input-label">
+								Primary chapter
+								<select
+									class="text-input"
+									value={primaryChapterId}
+									on={{
+										change: (event) => {
+											const target = event.currentTarget as HTMLSelectElement
+											updatePrimaryChapter(target.value)
+										},
+									}}
+								>
+									{chapters.map((chapter) => (
+										<option value={chapter.id}>{chapter.title}</option>
+									))}
+								</select>
+							</label>
+							<label class="input-label">
+								Secondary chapter
+								<select
+									class="text-input"
+									value={secondaryChapterId}
+									on={{
+										change: (event) => {
+											const target = event.currentTarget as HTMLSelectElement
+											updateSecondaryChapter(target.value)
+										},
+									}}
+								>
+									{chapters.map((chapter) => (
+										<option value={chapter.id}>{chapter.title}</option>
+									))}
+								</select>
+							</label>
+							<div class="actions-button-row">
+								<button
+									class="button button--primary"
+									type="button"
+									disabled={!primaryChapterId}
+									on={{ click: queueChapterEdit }}
+								>
+									Edit chapter
+								</button>
+								<button
+									class="button button--ghost"
+									type="button"
+									disabled={!canCombineChapters}
+									on={{ click: queueCombineChapters }}
+								>
+									Combine chapters
+								</button>
+							</div>
+							<p class="app-muted">
+								Stage edits or merge two chapters without leaving this view.
+							</p>
+						</article>
+
+						<article class="actions-panel">
+							<div class="panel-header">
+								<h3>Transcript utilities</h3>
+								<span class="status-pill status-pill--warning">Transcript</span>
+							</div>
+							<div class="actions-button-row">
+								<button
+									class="button button--ghost"
+									type="button"
+									on={{ click: queueTranscriptRegeneration }}
+								>
+									Regenerate transcript
+								</button>
+								<button
+									class="button button--ghost"
+									type="button"
+									on={{ click: queueCommandScan }}
+								>
+									Detect command windows
+								</button>
+							</div>
+							<p class="app-muted">
+								Refresh the transcript or scan for command markers on demand.
+							</p>
+						</article>
+
+						<article class="actions-panel">
+							<div class="panel-header">
+								<h3>Exports</h3>
+								<span class="status-pill status-pill--success">Export</span>
+							</div>
+							<div class="actions-button-row">
+								<button
+									class="button button--ghost"
+									type="button"
+									on={{ click: queuePreviewRender }}
+								>
+									Render preview clip
+								</button>
+								<button
+									class="button button--ghost"
+									type="button"
+									on={{ click: queueFinalExport }}
+								>
+									Export edited chapters
+								</button>
+							</div>
+							<p class="app-muted">
+								Trigger preview renders or finalize exports for the pipeline.
+							</p>
+						</article>
+					</div>
+
+					<div class="actions-queue">
+						<div class="panel-header">
+							<h3>Processing queue</h3>
+							<span class="summary-subtext">
+								{processingQueue.length} total
+							</span>
+						</div>
+						{processingQueue.length === 0 ? (
+							<p class="app-muted">
+								No actions queued yet. Use the buttons above to stage work.
+							</p>
+						) : (
+							<ul class="stacked-list processing-list">
+								{processingQueue.map((task) => (
+									<li
+										class={classNames(
+											'stacked-item',
+											'processing-row',
+											task.status === 'running' && 'is-running',
+											task.status === 'done' && 'is-complete',
+										)}
+									>
+										<div class="processing-row-header">
+											<div>
+												<h4>{task.title}</h4>
+												<p class="app-muted">{task.detail}</p>
+											</div>
+											<span
+												class={classNames(
+													'status-pill',
+													task.status === 'queued' && 'status-pill--info',
+													task.status === 'running' && 'status-pill--warning',
+													task.status === 'done' && 'status-pill--success',
+												)}
+											>
+												{task.status}
+											</span>
+										</div>
+										<div class="processing-row-meta">
+											<span class="summary-subtext">
+												{formatProcessingCategory(task.category)}
+											</span>
+											{task.status === 'queued' ? (
+												<button
+													class="button button--ghost"
+													type="button"
+													on={{ click: () => removeTask(task.id) }}
+												>
+													Remove
+												</button>
+											) : null}
+										</div>
+									</li>
+								))}
+							</ul>
+						)}
 					</div>
 				</section>
 
@@ -523,10 +898,11 @@ export function EditingWorkspace(handle: Handle) {
 							)}
 
 							<h3>Cut list</h3>
-							<ul class="cut-list">
+							<ul class="cut-list stacked-list">
 								{sortedCuts.map((range) => (
 									<li
 										class={classNames(
+											'stacked-item',
 											'cut-row',
 											range.id === selectedRangeId && 'is-selected',
 										)}
@@ -562,9 +938,9 @@ export function EditingWorkspace(handle: Handle) {
 						<p class="app-muted">
 							Update output names and mark chapters to skip before export.
 						</p>
-						<div class="chapter-list">
+						<div class="chapter-list stacked-list">
 							{chapters.map((chapter) => (
-								<article class="chapter-row">
+								<article class="chapter-row stacked-item">
 									<div class="chapter-header">
 										<div>
 											<h3>{chapter.title}</h3>
@@ -630,11 +1006,11 @@ export function EditingWorkspace(handle: Handle) {
 						<p class="app-muted">
 							Apply Jarvis commands to your cut list or chapter metadata.
 						</p>
-						<div class="command-list">
+						<div class="command-list stacked-list">
 							{commands.map((command) => {
 								const applied = isCommandApplied(command, sortedCuts, chapters)
 								return (
-									<article class="command-row">
+									<article class="command-row stacked-item">
 										<div class="command-header">
 											<h3>{command.label}</h3>
 											<span
@@ -705,10 +1081,14 @@ export function EditingWorkspace(handle: Handle) {
 						<p class="app-muted transcript-empty">
 							Type to search the transcript words. Click a result to jump to it.
 						</p>
+					) : searchResults.length === 0 ? (
+						<p class="app-muted transcript-empty">
+							No results found for "{query}".
+						</p>
 					) : (
-						<ul class="transcript-results">
+						<ul class="transcript-results stacked-list">
 							{searchResults.map((word) => (
-								<li>
+								<li class="stacked-item">
 									<button
 										class="transcript-result"
 										type="button"
@@ -717,9 +1097,7 @@ export function EditingWorkspace(handle: Handle) {
 										<span class="transcript-time">
 											{formatTimestamp(word.start)}
 										</span>
-										<span class="transcript-snippet">
-											{buildContext(transcript, word.index, 3)}
-										</span>
+										<span class="transcript-snippet">{word.context}</span>
 									</button>
 								</li>
 							))}
@@ -784,6 +1162,12 @@ function formatTimestamp(value: number) {
 
 function formatSeconds(value: number) {
 	return `${value.toFixed(1)}s`
+}
+
+function formatProcessingCategory(category: ProcessingCategory) {
+	if (category === 'chapter') return 'Chapter task'
+	if (category === 'transcript') return 'Transcript task'
+	return 'Export task'
 }
 
 function classNames(...values: Array<string | false | null | undefined>) {
