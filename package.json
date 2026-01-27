@@ -35,7 +35,7 @@
     "prettier": "^3.8.1"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@inquirer/search": "^4.1.0",
@@ -44,7 +44,7 @@
     "match-sorter": "^8.2.0",
     "onnxruntime-node": "^1.23.2",
     "ora": "^9.1.0",
-    "remix": "3.0.0-alpha.0",
+    "remix": "3.0.0-alpha.1",
     "yargs": "^18.0.0"
   }
 }
