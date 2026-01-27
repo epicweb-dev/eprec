@@ -43,7 +43,7 @@ export const EDIT_CONFIG = {
 	keepEditIntermediates: false,
 } as const
 
-export const DEFAULT_MIN_CHAPTER_SECONDS = 15
+export const DEFAULT_MIN_CHAPTER_SECONDS = 6
 export const TRANSCRIPTION_PHRASES = ['jarvis bad take', 'bad take jarvis']
 export const COMMAND_WAKE_WORD = 'jarvis'
 export const COMMAND_CLOSE_WORD = 'thanks'
