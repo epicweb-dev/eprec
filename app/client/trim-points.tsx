@@ -23,6 +23,11 @@ const MIN_TRIM_LENGTH = 0.1
 const PLAYHEAD_STEP = 0.1
 const KEYBOARD_STEP = 0.1
 const SHIFT_STEP = 1
+const MIN_ZOOM = 1
+const MAX_ZOOM = 8
+const ZOOM_STEP = 0.5
+const NAVIGATION_STEP = 1
+const VIEW_PAN_RATIO = 0.8
 const DEMO_VIDEO_PATH = 'fixtures/e2e-test.mp4'
 const WAVEFORM_SAMPLES = 240
 
@@ -91,6 +96,12 @@ function formatSeconds(value: number) {
 	return `${value.toFixed(1)}s`
 }
 
+function formatZoom(value: number) {
+	if (!Number.isFinite(value) || value <= 0) return '1x'
+	const rounded = Math.round(value * 10) / 10
+	return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}x`
+}
+
 function classNames(...values: Array<string | false | null | undefined>) {
 	return values.filter(Boolean).join(' ')
 }
@@ -134,6 +145,8 @@ export function TrimPoints(handle: Handle) {
 	let waveformError = ''
 	let waveformSource = ''
 	let waveformNode: HTMLCanvasElement | null = null
+	let zoomLevel = MIN_ZOOM
+	let zoomWindowStart = 0
 
 	// Cleanup ffmpeg operation on unmount
 	handle.signal.addEventListener('abort', () => {
@@ -161,6 +174,122 @@ export function TrimPoints(handle: Handle) {
 		trimRanges = []
 		selectedRangeId = null
 		activeDrag = null
+		zoomLevel = MIN_ZOOM
+		zoomWindowStart = 0
+	}
+
+	const getWindowState = () => {
+		if (previewDuration <= 0) {
+			return {
+				zoom: clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM),
+				windowDuration: 0,
+				windowStart: 0,
+				windowEnd: 0,
+				maxStart: 0,
+			}
+		}
+		const zoom = clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM)
+		const windowDuration = previewDuration / zoom
+		const maxStart = Math.max(previewDuration - windowDuration, 0)
+		const windowStart = clamp(zoomWindowStart, 0, maxStart)
+		return {
+			zoom,
+			windowDuration,
+			windowStart,
+			windowEnd: windowStart + windowDuration,
+			maxStart,
+		}
+	}
+
+	const normalizeZoomState = (options: { focusTime?: number } = {}) => {
+		if (previewDuration <= 0) {
+			zoomLevel = MIN_ZOOM
+			zoomWindowStart = 0
+			return
+		}
+		zoomLevel = clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM)
+		const windowDuration = previewDuration / zoomLevel
+		const maxStart = Math.max(previewDuration - windowDuration, 0)
+		if (typeof options.focusTime === 'number') {
+			const focus = clamp(options.focusTime, 0, previewDuration)
+			zoomWindowStart = clamp(focus - windowDuration / 2, 0, maxStart)
+			return
+		}
+		zoomWindowStart = clamp(zoomWindowStart, 0, maxStart)
+	}
+
+	const ensurePlayheadVisible = () => {
+		if (previewDuration <= 0) return
+		const { windowDuration, windowStart, windowEnd, maxStart } = getWindowState()
+		if (windowDuration <= 0) return
+		let nextStart = windowStart
+		if (playhead < windowStart) {
+			nextStart = clamp(playhead - windowDuration * 0.1, 0, maxStart)
+		} else if (playhead > windowEnd) {
+			nextStart = clamp(playhead - windowDuration * 0.9, 0, maxStart)
+		}
+		if (nextStart !== zoomWindowStart) {
+			zoomWindowStart = nextStart
+			drawWaveform()
+		}
+	}
+
+	const setZoom = (value: number, focusTime = playhead) => {
+		zoomLevel = clamp(value, MIN_ZOOM, MAX_ZOOM)
+		if (previewDuration > 0) {
+			const windowDuration = previewDuration / zoomLevel
+			const maxStart = Math.max(previewDuration - windowDuration, 0)
+			zoomWindowStart = clamp(focusTime - windowDuration / 2, 0, maxStart)
+		} else {
+			zoomWindowStart = 0
+		}
+		drawWaveform()
+		handle.update()
+	}
+
+	const setWindowStart = (value: number) => {
+		if (previewDuration <= 0) return
+		const windowDuration = previewDuration / clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM)
+		const maxStart = Math.max(previewDuration - windowDuration, 0)
+		zoomWindowStart = clamp(value, 0, maxStart)
+		drawWaveform()
+		handle.update()
+	}
+
+	const centerWindowOnTime = (value: number) => {
+		if (previewDuration <= 0) return
+		const windowDuration = previewDuration / clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM)
+		const maxStart = Math.max(previewDuration - windowDuration, 0)
+		const focus = clamp(value, 0, previewDuration)
+		zoomWindowStart = clamp(focus - windowDuration / 2, 0, maxStart)
+		drawWaveform()
+		handle.update()
+	}
+
+	const panWindow = (direction: number) => {
+		const { windowDuration } = getWindowState()
+		if (windowDuration <= 0) return
+		const shift = windowDuration * VIEW_PAN_RATIO * direction
+		setWindowStart(zoomWindowStart + shift)
+	}
+
+	const zoomToRange = (range: TrimRangeWithId) => {
+		if (previewDuration <= 0) return
+		const rangeLength = Math.max(range.end - range.start, MIN_TRIM_LENGTH)
+		const padding = Math.max(rangeLength * 0.5, MIN_TRIM_LENGTH * 2)
+		const targetWindow = clamp(rangeLength + padding, MIN_TRIM_LENGTH, previewDuration)
+		const targetZoom = clamp(previewDuration / targetWindow, MIN_ZOOM, MAX_ZOOM)
+		zoomLevel = targetZoom
+		const windowDuration = previewDuration / zoomLevel
+		const maxStart = Math.max(previewDuration - windowDuration, 0)
+		const nextStart = clamp(
+			range.start - (windowDuration - rangeLength) / 2,
+			0,
+			maxStart,
+		)
+		zoomWindowStart = nextStart
+		drawWaveform()
+		handle.update()
 	}
 
 	const syncVideoToTime = (
@@ -181,6 +310,7 @@ export function TrimPoints(handle: Handle) {
 		) {
 			previewNode.currentTime = nextTime
 		}
+		ensurePlayheadVisible()
 		handle.update()
 	}
 
@@ -213,13 +343,23 @@ export function TrimPoints(handle: Handle) {
 		waveformNode.height = Math.floor(height * dpr)
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 		ctx.clearRect(0, 0, width, height)
+		let samples = waveformSamples
+		if (previewDuration > 0 && waveformSamples.length > 0 && zoomLevel > 1) {
+			const { windowStart, windowEnd } = getWindowState()
+			const totalSamples = waveformSamples.length
+			const startIndex = Math.floor((windowStart / previewDuration) * totalSamples)
+			const endIndex = Math.ceil((windowEnd / previewDuration) * totalSamples)
+			const safeStart = clamp(startIndex, 0, Math.max(totalSamples - 1, 0))
+			const safeEnd = clamp(endIndex, safeStart + 1, totalSamples)
+			samples = waveformSamples.slice(safeStart, safeEnd)
+		}
 		const color =
 			typeof window !== 'undefined'
 				? window.getComputedStyle(waveformNode).color
 				: '#94a3b8'
 		ctx.strokeStyle = color
 		ctx.lineWidth = 1
-		if (waveformSamples.length === 0) {
+		if (samples.length === 0) {
 			ctx.beginPath()
 			ctx.moveTo(0, height / 2)
 			ctx.lineTo(width, height / 2)
@@ -227,9 +367,9 @@ export function TrimPoints(handle: Handle) {
 			return
 		}
 		const mid = height / 2
-		const step = width / waveformSamples.length
+		const step = width / samples.length
 		ctx.beginPath()
-		waveformSamples.forEach((sample, index) => {
+		samples.forEach((sample, index) => {
 			const x = index * step
 			const amplitude = sample * (mid - 2)
 			ctx.moveTo(x, mid - amplitude)
@@ -375,6 +515,38 @@ export function TrimPoints(handle: Handle) {
 		syncVideoToTime(value, { updateInput: true })
 	}
 
+	const nudgePlayhead = (delta: number) => {
+		if (!previewReady || previewDuration <= 0) return
+		setPlayhead(playhead + delta)
+	}
+
+	const jumpToStart = () => setPlayhead(0)
+
+	const jumpToEnd = () => {
+		if (!previewReady || previewDuration <= 0) return
+		setPlayhead(previewDuration)
+	}
+
+	const jumpToPrevTrim = () => {
+		const previousRanges = sortRanges(trimRanges).filter(
+			(range) => range.start < playhead,
+		)
+		const previous = previousRanges[previousRanges.length - 1]
+		if (previous) setPlayhead(previous.start)
+	}
+
+	const jumpToNextTrim = () => {
+		const next = sortRanges(trimRanges).find((range) => range.start > playhead)
+		if (next) setPlayhead(next.start)
+	}
+
+	const zoomToSelectedRange = () => {
+		if (!selectedRangeId) return
+		const range = trimRanges.find((entry) => entry.id === selectedRangeId)
+		if (!range) return
+		zoomToRange(range)
+	}
+
 	const addTrimRange = () => {
 		if (!previewReady || previewDuration <= MIN_TRIM_LENGTH) {
 			pathError = 'Load a video before adding trim ranges.'
@@ -461,7 +633,10 @@ export function TrimPoints(handle: Handle) {
 		if (!trackNode || previewDuration <= 0) return 0
 		const rect = trackNode.getBoundingClientRect()
 		const ratio = clamp((clientX - rect.left) / rect.width, 0, 1)
-		return ratio * previewDuration
+		const { windowDuration, windowStart } = getWindowState()
+		if (windowDuration <= 0) return 0
+		const nextTime = windowStart + ratio * windowDuration
+		return clamp(nextTime, 0, previewDuration)
 	}
 
 	const startDrag = (
@@ -702,6 +877,61 @@ export function TrimPoints(handle: Handle) {
 					: runStatus === 'error'
 						? 'Error'
 						: 'Idle'
+		const windowState = getWindowState()
+		const windowDuration = windowState.windowDuration
+		const windowStart = windowState.windowStart
+		const windowEnd = windowState.windowEnd
+		const windowLabel =
+			previewReady && windowDuration > 0
+				? `${formatTimestamp(windowStart)} - ${formatTimestamp(windowEnd)}`
+				: '--:--.--'
+		const zoomLabel = formatZoom(windowState.zoom)
+		const windowStep =
+			previewReady && windowDuration > 0
+				? Math.max(windowDuration / 20, PLAYHEAD_STEP)
+				: PLAYHEAD_STEP
+		const maxWindowStart = Math.max(duration - windowDuration, 0)
+		const playheadPercent =
+			previewReady && windowDuration > 0
+				? clamp((playhead - windowStart) / windowDuration, 0, 1) * 100
+				: 0
+		const playheadInView =
+			previewReady && playhead >= windowStart && playhead <= windowEnd
+		const visibleRanges =
+			windowDuration > 0
+				? sortedRanges
+						.map((range) => {
+							const clippedStart = range.start < windowStart
+							const clippedEnd = range.end > windowEnd
+							const start = clippedStart ? windowStart : range.start
+							const end = clippedEnd ? windowEnd : range.end
+							if (end <= start) return null
+							const left = ((start - windowStart) / windowDuration) * 100
+							const width = ((end - start) / windowDuration) * 100
+							return {
+								range,
+								left,
+								width,
+								clippedStart,
+								clippedEnd,
+							}
+						})
+						.filter(
+							(
+								entry,
+							): entry is {
+								range: TrimRangeWithId
+								left: number
+								width: number
+								clippedStart: boolean
+								clippedEnd: boolean
+							} => Boolean(entry),
+						)
+				: []
+		const timelineTicks =
+			previewReady && windowDuration > 0
+				? buildTimelineTicks(windowStart, windowDuration, 6)
+				: buildTimelineTicks(0, Math.max(duration, 0), 6)
 		const hintId = 'trim-keyboard-hint'
 		return (
 			<main class="app-shell trim-shell">
@@ -817,6 +1047,7 @@ export function TrimPoints(handle: Handle) {
 										previewReady = previewDuration > 0
 										previewError = ''
 										playhead = clamp(playhead, 0, previewDuration)
+										normalizeZoomState({ focusTime: playhead })
 										if (!isTimeEditing) {
 											timeInputValue = formatTimestamp(playhead)
 										}
@@ -835,6 +1066,7 @@ export function TrimPoints(handle: Handle) {
 										if (!isTimeEditing) {
 											timeInputValue = formatTimestamp(playhead)
 										}
+										ensurePlayheadVisible()
 										handle.update()
 									}
 									const handlePlay = () => {
@@ -932,18 +1164,26 @@ export function TrimPoints(handle: Handle) {
 					</div>
 					<p class="app-muted trim-hint" id={hintId}>
 						Use arrow keys to nudge by {KEYBOARD_STEP}s. Hold Shift for{' '}
-						{SHIFT_STEP}
-						s.
+						{SHIFT_STEP}s. Click the timeline to move the playhead and use zoom
+						controls to focus on edits.
 					</p>
 					<div
 						class={classNames(
 							'trim-track',
 							!previewReady && 'trim-track--disabled',
+							previewReady && 'trim-track--interactive',
 						)}
 						connect={(node: HTMLDivElement) => {
 							trackNode = node
 						}}
-						style={`--playhead:${duration > 0 ? (playhead / duration) * 100 : 0}%`}
+						style={`--playhead:${playheadPercent}%`}
+						on={{
+							pointerdown: (event) => {
+								if (event.currentTarget !== event.target) return
+								const nextTime = getTimeFromClientX(event.clientX)
+								setPlayhead(nextTime)
+							},
+						}}
 					>
 						<canvas
 							class="trim-waveform"
@@ -961,72 +1201,105 @@ export function TrimPoints(handle: Handle) {
 								})
 							}}
 						/>
-						{sortedRanges.map((range) => (
+						{visibleRanges.map((entry) => (
 							<div
 								class={classNames(
 									'trim-range',
-									range.id === selectedRangeId && 'is-selected',
+									entry.range.id === selectedRangeId && 'is-selected',
+									entry.clippedStart && 'trim-range--clipped-start',
+									entry.clippedEnd && 'trim-range--clipped-end',
 								)}
-								style={`--range-left:${duration > 0 ? (range.start / duration) * 100 : 0}%; --range-width:${duration > 0 ? ((range.end - range.start) / duration) * 100 : 0}%`}
-								on={{ click: () => selectRange(range.id) }}
+								style={`--range-left:${entry.left}%; --range-width:${entry.width}%`}
+								on={{ click: () => selectRange(entry.range.id) }}
 								role="group"
-								aria-label={`Trim range ${formatTimestamp(range.start)} to ${formatTimestamp(range.end)}`}
+								aria-label={`Trim range ${formatTimestamp(entry.range.start)} to ${formatTimestamp(entry.range.end)}`}
 							>
 								<span class="trim-range-label">
-									Remove {formatTimestamp(range.start)} -{' '}
-									{formatTimestamp(range.end)}
+									Remove {formatTimestamp(entry.range.start)} -{' '}
+									{formatTimestamp(entry.range.end)}
 								</span>
-								<span class="trim-handle-label trim-handle-label--start">
-									{formatTimestamp(range.start)}
-								</span>
-								<button
-									type="button"
-									class="trim-handle trim-handle--start"
-									role="slider"
-									aria-label="Trim start"
-									aria-valuemin={0}
-									aria-valuemax={duration}
-									aria-valuenow={range.start}
-									aria-valuetext={formatTimestamp(range.start)}
-									aria-describedby={hintId}
-									on={{
-										focus: () =>
-											syncVideoToTime(range.start, { updateInput: true }),
-										pointerdown: (event) => startDrag(event, range.id, 'start'),
-										pointermove: moveDrag,
-										pointerup: endDrag,
-										pointercancel: endDrag,
-										keydown: (event) => handleRangeKey(event, range, 'start'),
-									}}
-								/>
-								<span class="trim-handle-label trim-handle-label--end">
-									{formatTimestamp(range.end)}
-								</span>
-								<button
-									type="button"
-									class="trim-handle trim-handle--end"
-									role="slider"
-									aria-label="Trim end"
-									aria-valuemin={0}
-									aria-valuemax={duration}
-									aria-valuenow={range.end}
-									aria-valuetext={formatTimestamp(range.end)}
-									aria-describedby={hintId}
-									on={{
-										focus: () =>
-											syncVideoToTime(range.end, { updateInput: true }),
-										pointerdown: (event) => startDrag(event, range.id, 'end'),
-										pointermove: moveDrag,
-										pointerup: endDrag,
-										pointercancel: endDrag,
-										keydown: (event) => handleRangeKey(event, range, 'end'),
-									}}
-								/>
+								{!entry.clippedStart ? (
+									<>
+										<span class="trim-handle-label trim-handle-label--start">
+											{formatTimestamp(entry.range.start)}
+										</span>
+										<button
+											type="button"
+											class="trim-handle trim-handle--start"
+											role="slider"
+											aria-label="Trim start"
+											aria-valuemin={0}
+											aria-valuemax={duration}
+											aria-valuenow={entry.range.start}
+											aria-valuetext={formatTimestamp(entry.range.start)}
+											aria-describedby={hintId}
+											on={{
+												focus: () =>
+													syncVideoToTime(entry.range.start, {
+														updateInput: true,
+													}),
+												pointerdown: (event) =>
+													startDrag(event, entry.range.id, 'start'),
+												pointermove: moveDrag,
+												pointerup: endDrag,
+												pointercancel: endDrag,
+												keydown: (event) =>
+													handleRangeKey(event, entry.range, 'start'),
+											}}
+										/>
+									</>
+								) : null}
+								{!entry.clippedEnd ? (
+									<>
+										<span class="trim-handle-label trim-handle-label--end">
+											{formatTimestamp(entry.range.end)}
+										</span>
+										<button
+											type="button"
+											class="trim-handle trim-handle--end"
+											role="slider"
+											aria-label="Trim end"
+											aria-valuemin={0}
+											aria-valuemax={duration}
+											aria-valuenow={entry.range.end}
+											aria-valuetext={formatTimestamp(entry.range.end)}
+											aria-describedby={hintId}
+											on={{
+												focus: () =>
+													syncVideoToTime(entry.range.end, {
+														updateInput: true,
+													}),
+												pointerdown: (event) =>
+													startDrag(event, entry.range.id, 'end'),
+												pointermove: moveDrag,
+												pointerup: endDrag,
+												pointercancel: endDrag,
+												keydown: (event) =>
+													handleRangeKey(event, entry.range, 'end'),
+											}}
+										/>
+									</>
+								) : null}
 							</div>
 						))}
-						<span class="trim-playhead" />
+						<span
+							class={classNames(
+								'trim-playhead',
+								!playheadInView && 'trim-playhead--clipped',
+							)}
+						/>
+					</div>
+					<div class="timeline-scale trim-timeline-scale">
+						{timelineTicks.map((tick) => (
+							<span>{formatTimestamp(tick)}</span>
+						))}
 					</div>
 					<div class="trim-waveform-meta">
+						<span class="summary-subtext">
+							{previewReady && windowDuration > 0
+								? `View ${windowLabel} · Zoom ${zoomLabel}`
+								: 'Load a video to unlock timeline zoom.'}
+						</span>
 						{waveformStatus === 'loading' ? (
 							<span class="summary-subtext">Rendering waveform...</span>
 						) : waveformStatus === 'error' ? (
@@ -1063,15 +1336,170 @@ export function TrimPoints(handle: Handle) {
 							disabled={!previewReady || sortedRanges.length === 0}
 							on={{
 								click: () => {
-									const next = sortedRanges.find(
-										(range) => range.start > playhead,
-									)
-									if (next) setPlayhead(next.start)
+									jumpToPrevTrim()
+								},
+							}}
+						>
+							Prev trim
+						</button>
+						<button
+							class="button button--ghost"
+							type="button"
+							disabled={!previewReady || sortedRanges.length === 0}
+							on={{
+								click: () => {
+									jumpToNextTrim()
 								},
 							}}
 						>
 							Next trim
 						</button>
+					</div>
+					<div class="timeline-nav">
+						<label class="control-label">
+							Navigate
+							<span class="control-value">{NAVIGATION_STEP}s step</span>
+						</label>
+						<div class="timeline-action-group">
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady}
+								on={{ click: jumpToStart }}
+							>
+								Start
+							</button>
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady}
+								on={{ click: () => nudgePlayhead(-NAVIGATION_STEP) }}
+							>
+								-{NAVIGATION_STEP}s
+							</button>
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady}
+								on={{ click: () => nudgePlayhead(NAVIGATION_STEP) }}
+							>
+								+{NAVIGATION_STEP}s
+							</button>
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady}
+								on={{ click: jumpToEnd }}
+							>
+								End
+							</button>
+						</div>
+						<div class="timeline-action-group">
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady}
+								on={{ click: () => centerWindowOnTime(playhead) }}
+							>
+								Center view
+							</button>
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady || !selectedRangeId}
+								on={{ click: zoomToSelectedRange }}
+							>
+								Zoom to selection
+							</button>
+						</div>
+					</div>
+					<div class="timeline-zoom">
+						<label class="control-label">
+							Zoom
+							<span class="control-value">{zoomLabel}</span>
+						</label>
+						<div class="timeline-zoom-controls">
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady || zoomLevel <= MIN_ZOOM}
+								on={{ click: () => setZoom(zoomLevel - ZOOM_STEP) }}
+							>
+								-
+							</button>
+							<input
+								class="timeline-slider"
+								type="range"
+								min={MIN_ZOOM}
+								max={MAX_ZOOM}
+								step={ZOOM_STEP}
+								value={zoomLevel}
+								disabled={!previewReady}
+								on={{
+									input: (event) => {
+										const target = event.currentTarget as HTMLInputElement
+										setZoom(Number(target.value))
+									},
+								}}
+							/>
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady || zoomLevel >= MAX_ZOOM}
+								on={{ click: () => setZoom(zoomLevel + ZOOM_STEP) }}
+							>
+								+
+							</button>
+						</div>
+						<div class="timeline-action-group">
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady}
+								on={{ click: () => setZoom(MIN_ZOOM, playhead) }}
+							>
+								Fit
+							</button>
+						</div>
+					</div>
+					<div class="timeline-window">
+						<label class="control-label">
+							View window
+							<span class="control-value">{windowLabel}</span>
+						</label>
+						<input
+							class="timeline-slider"
+							type="range"
+							min="0"
+							max={maxWindowStart}
+							step={windowStep}
+							value={zoomWindowStart}
+							disabled={!previewReady || windowDuration <= 0}
+							on={{
+								input: (event) => {
+									const target = event.currentTarget as HTMLInputElement
+									setWindowStart(Number(target.value))
+								},
+							}}
+						/>
+						<div class="timeline-action-group">
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady || windowDuration <= 0}
+								on={{ click: () => panWindow(-1) }}
+							>
+								Prev view
+							</button>
+							<button
+								class="button button--ghost"
+								type="button"
+								disabled={!previewReady || windowDuration <= 0}
+								on={{ click: () => panWindow(1) }}
+							>
+								Next view
+							</button>
+						</div>
 					</div>
 				</section>
 
@@ -1273,4 +1701,13 @@ export function TrimPoints(handle: Handle) {
 			</main>
 		)
 	}
+}
+
+function buildTimelineTicks(start: number, windowDuration: number, count: number) {
+	if (count <= 1) return [start]
+	if (windowDuration <= 0) return [start]
+	const step = windowDuration / (count - 1)
+	return Array.from({ length: count }, (_, index) =>
+		Number((start + index * step).toFixed(2)),
+	)
 }
