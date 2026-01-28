@@ -19,7 +19,7 @@ import type {
 	ProcessedChapterInfo,
 	EditWorkspaceInfo,
 } from '../process-course/types'
-import { formatSeconds } from './utils'
+import { formatSeconds, getMediaDurationSeconds } from './utils'
 import { checkSegmentHasSpeech } from './speech-detection'
 import { setActiveSpinnerText } from '../cli-ux'
 
@@ -277,9 +277,20 @@ async function processInputFile(options: {
 		await mkdir(tmpDir, { recursive: true })
 	}
 
-	const chapters = await getChapters(inputPath)
+	let chapters = await getChapters(inputPath)
 	if (chapters.length === 0) {
-		throw new Error('No chapters found. The input must contain chapters.')
+		const duration = await getMediaDurationSeconds(inputPath)
+		chapters = [
+			{
+				index: 0,
+				start: 0,
+				end: duration,
+				title: path.basename(inputPath),
+			},
+		]
+		logInfo(
+			`No chapters found. Processing full file as one chapter (${formatSeconds(duration)}).`,
+		)
 	}
 
 	const chapterIndexes = chapterSelection
