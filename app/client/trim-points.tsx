@@ -220,7 +220,8 @@ export function TrimPoints(handle: Handle) {
 
 	const ensurePlayheadVisible = () => {
 		if (previewDuration <= 0) return
-		const { windowDuration, windowStart, windowEnd, maxStart } = getWindowState()
+		const { windowDuration, windowStart, windowEnd, maxStart } =
+			getWindowState()
 		if (windowDuration <= 0) return
 		let nextStart = windowStart
 		if (playhead < windowStart) {
@@ -249,7 +250,8 @@ export function TrimPoints(handle: Handle) {
 
 	const setWindowStart = (value: number) => {
 		if (previewDuration <= 0) return
-		const windowDuration = previewDuration / clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM)
+		const windowDuration =
+			previewDuration / clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM)
 		const maxStart = Math.max(previewDuration - windowDuration, 0)
 		zoomWindowStart = clamp(value, 0, maxStart)
 		drawWaveform()
@@ -258,7 +260,8 @@ export function TrimPoints(handle: Handle) {
 
 	const centerWindowOnTime = (value: number) => {
 		if (previewDuration <= 0) return
-		const windowDuration = previewDuration / clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM)
+		const windowDuration =
+			previewDuration / clamp(zoomLevel, MIN_ZOOM, MAX_ZOOM)
 		const maxStart = Math.max(previewDuration - windowDuration, 0)
 		const focus = clamp(value, 0, previewDuration)
 		zoomWindowStart = clamp(focus - windowDuration / 2, 0, maxStart)
@@ -277,7 +280,11 @@ export function TrimPoints(handle: Handle) {
 		if (previewDuration <= 0) return
 		const rangeLength = Math.max(range.end - range.start, MIN_TRIM_LENGTH)
 		const padding = Math.max(rangeLength * 0.5, MIN_TRIM_LENGTH * 2)
-		const targetWindow = clamp(rangeLength + padding, MIN_TRIM_LENGTH, previewDuration)
+		const targetWindow = clamp(
+			rangeLength + padding,
+			MIN_TRIM_LENGTH,
+			previewDuration,
+		)
 		const targetZoom = clamp(previewDuration / targetWindow, MIN_ZOOM, MAX_ZOOM)
 		zoomLevel = targetZoom
 		const windowDuration = previewDuration / zoomLevel
@@ -347,7 +354,9 @@ export function TrimPoints(handle: Handle) {
 		if (previewDuration > 0 && waveformSamples.length > 0 && zoomLevel > 1) {
 			const { windowStart, windowEnd } = getWindowState()
 			const totalSamples = waveformSamples.length
-			const startIndex = Math.floor((windowStart / previewDuration) * totalSamples)
+			const startIndex = Math.floor(
+				(windowStart / previewDuration) * totalSamples,
+			)
 			const endIndex = Math.ceil((windowEnd / previewDuration) * totalSamples)
 			const safeStart = clamp(startIndex, 0, Math.max(totalSamples - 1, 0))
 			const safeEnd = clamp(endIndex, safeStart + 1, totalSamples)
@@ -1703,7 +1712,11 @@ export function TrimPoints(handle: Handle) {
 	}
 }
 
-function buildTimelineTicks(start: number, windowDuration: number, count: number) {
+function buildTimelineTicks(
+	start: number,
+	windowDuration: number,
+	count: number,
+) {
 	if (count <= 1) return [start]
 	if (windowDuration <= 0) return [start]
 	const step = windowDuration / (count - 1)
