@@ -314,7 +314,7 @@ export function EditingWorkspace(handle: Handle) {
 		if (command.action === 'rename' && command.value) {
 			chapters = chapters.map((chapter) =>
 				chapter.id === command.chapterId
-					? { ...chapter, outputName: command.value, status: 'review' }
+					? { ...chapter, outputName: command.value!, status: 'review' }
 					: chapter,
 			)
 			handle.update()
@@ -1529,10 +1529,14 @@ function sortRanges(ranges: CutRange[]) {
 function mergeOverlappingRanges(ranges: CutRange[]) {
 	if (ranges.length === 0) return []
 	const sorted = sortRanges(ranges)
-	const merged: CutRange[] = [{ ...sorted[0] }]
+	const first = sorted[0]
+	if (!first) return []
+	const merged: CutRange[] = [{ ...first }]
 	for (let i = 1; i < sorted.length; i++) {
 		const current = sorted[i]
+		if (!current) continue
 		const last = merged[merged.length - 1]
+		if (!last) continue
 		if (current.start <= last.end) {
 			last.end = Math.max(last.end, current.end)
 		} else {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import path from 'node:path'
-import type { Argv, Arguments, CommandBuilder, CommandHandler } from 'yargs'
+import type { Arguments } from 'yargs'
 import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
 import { startAppServer } from './app-server'
@@ -89,14 +89,14 @@ async function main(rawArgs = hideBin(process.argv)) {
 		.command(
 			'edit',
 			'Edit a single video using transcript text edits',
-			configureEditVideoCommand as CommandBuilder,
-			createEditVideoHandler(handlerOptions) as CommandHandler,
+			configureEditVideoCommand,
+			createEditVideoHandler(handlerOptions),
 		)
 		.command(
 			'combine',
 			'Combine two videos with speech-aligned padding',
-			configureCombineVideosCommand as CommandBuilder,
-			createCombineVideosHandler(handlerOptions) as CommandHandler,
+			configureCombineVideosCommand,
+			createCombineVideosHandler(handlerOptions),
 		)
 		.command(
 			'app start',

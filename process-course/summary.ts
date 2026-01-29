@@ -8,7 +8,6 @@ import {
 } from './paths'
 import { logInfo } from './logging'
 import type {
-	Chapter,
 	JarvisWarning,
 	JarvisEdit,
 	JarvisNote,
@@ -162,8 +161,6 @@ export async function writeSummaryLogs(options: {
 		inputPath,
 		summary,
 		summaryDetails,
-		jarvisWarnings,
-		jarvisEdits,
 		editWorkspaces,
 		dryRun,
 	} = options

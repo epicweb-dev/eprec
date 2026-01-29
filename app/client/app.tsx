@@ -1,8 +1,7 @@
-import type { Handle } from 'remix/component'
 import { EditingWorkspace } from './editing-workspace.tsx'
 import { TrimPoints } from './trim-points.tsx'
 
-export function App(handle: Handle) {
+export function App() {
 	return () => {
 		const pathname =
 			typeof window === 'undefined' ? '/' : window.location.pathname

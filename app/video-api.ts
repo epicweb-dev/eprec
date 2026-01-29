@@ -18,8 +18,8 @@ function isLocalhostOrigin(origin: string | null): boolean {
 	}
 }
 
-function getVideoCorsHeaders(origin: string | null) {
-	if (!isLocalhostOrigin(origin)) {
+function getVideoCorsHeaders(origin: string | null): Record<string, string> {
+	if (!isLocalhostOrigin(origin) || !origin) {
 		return {}
 	}
 	return {

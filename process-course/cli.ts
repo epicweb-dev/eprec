@@ -1,4 +1,3 @@
-import path from 'node:path'
 import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
 import type { Argv, Arguments } from 'yargs'

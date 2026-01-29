@@ -222,6 +222,7 @@ async function runTask(task: ProcessingTask) {
 		for (let index = 0; index < steps.length; index++) {
 			if (controller.signal.aborted) return
 			const label = steps[index]
+			if (!label) continue
 			updateTask(task.id, {
 				progress: buildProgress(index + 1, steps.length, label),
 			})

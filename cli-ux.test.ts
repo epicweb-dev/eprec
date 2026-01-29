@@ -18,7 +18,7 @@ async function createTempDir() {
 function createPrompterReturningPathString(): Prompter {
 	let selectCalls = 0
 	return {
-		async select(_message, choices) {
+		async select<T>(_message: string, choices: PromptChoice<T>[]): Promise<T> {
 			selectCalls += 1
 			if (selectCalls > 1) {
 				throw new Error('select called too many times')
@@ -27,7 +27,18 @@ function createPrompterReturningPathString(): Prompter {
 			if (!fileChoice) {
 				throw new Error('Missing file choice')
 			}
-			return fileChoice.path
+			// Find the choice that matches the file path and return its value
+			const matchingChoice = choices.find(
+				(c) =>
+					c.value &&
+					typeof c.value === 'object' &&
+					'path' in c.value &&
+					c.value.path === fileChoice.path,
+			)
+			if (!matchingChoice) {
+				throw new Error('Missing matching choice')
+			}
+			return matchingChoice.value as T
 		},
 		async search() {
 			throw new Error('search not expected')

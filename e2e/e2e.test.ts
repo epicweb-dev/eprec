@@ -10,7 +10,7 @@ import {
 import { extractTranscriptionAudio } from '../process-course/ffmpeg'
 import { transcriptIncludesWord } from '../process-course/utils/transcript'
 import { transcribeAudio } from '../src/whispercpp-transcribe'
-import { runCommand, getMediaDurationSeconds } from '../src/utils'
+import { getMediaDurationSeconds } from '../src/utils'
 import { detectSpeechBounds } from '../src/speech-detection'
 import { CONFIG, EDIT_CONFIG } from '../process-course/config'
 

@@ -231,11 +231,15 @@ export async function startAppServer(options: AppServerOptions = {}) {
 		process.env.EPREC_APP_VIDEO_PATH = options.videoPath.trim()
 	}
 	const env = getEnv()
-	const host = options.host ?? env.HOST
+	const host = options.host ?? env.HOST ?? 'localhost'
 	const desiredPort = options.port ?? env.PORT
 	const port = await getServerPort(env.NODE_ENV, desiredPort)
 	let server = startServer(port, host)
-	const getUrl = () => formatServerUrl(server.hostname, server.port)
+	const getUrl = () => {
+		const serverHostname = server.hostname ?? host
+		const serverPort = server.port ?? port
+		return formatServerUrl(serverHostname, serverPort)
+	}
 	let cleanupInput = () => {}
 	let isRestarting = false
 	const stopServer = () => {

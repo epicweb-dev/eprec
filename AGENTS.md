@@ -41,23 +41,42 @@ Do not introduce React, Preact, or any other UI framework.
 
 Remix components work differently from React. Here's how:
 
-#### All Components Receive a Handle
+#### Components May Receive a Handle
 
-**All components** receive a `Handle` as their first argument and return a
-render function that receives props. Even if you don't need the handle, you must
-accept it:
+Components that need state management, event subscriptions, or other handle
+functionality receive a `Handle` as their first argument. Components that don't
+need the handle should omit it entirely:
 
 ```tsx
 import type { Handle } from 'remix/component'
 
-// Simple component that doesn't use the handle
-function Greeting(handle: Handle) {
+// Simple component that doesn't use the handle - no handle parameter needed
+function Greeting() {
 	return (props: { name: string }) => <div>Hello, {props.name}!</div>
 }
 
-// Component that doesn't take props at all
-function SimpleComponent(handle: Handle) {
+// Component that doesn't take props at all - no handle parameter needed
+function SimpleComponent() {
 	return () => <div>Hello, world!</div>
+}
+
+// Component that uses the handle - handle parameter required
+function Counter(handle: Handle) {
+	let count = 0
+	return () => (
+		<div>
+			<button
+				on={{
+					click: () => {
+						count++
+						handle.update()
+					},
+				}}
+			>
+				Count: {count}
+			</button>
+		</div>
+	)
 }
 ```
 

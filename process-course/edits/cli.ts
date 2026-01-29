@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 import path from 'node:path'
-import type { Argv, Arguments, CommandBuilder, CommandHandler } from 'yargs'
+import type { Argv, Arguments } from 'yargs'
 import yargs from 'yargs/yargs'
 import { hideBin } from 'yargs/helpers'
+
+type CommandHandler = (argv: Arguments) => Promise<void>
 import {
 	PromptCancelled,
 	createInquirerPrompter,
@@ -179,7 +181,7 @@ function resolvePaddingMs(value: unknown) {
 }
 
 export function createEditVideoHandler(options: CliUxOptions): CommandHandler {
-	return async (argv) => {
+	return async (argv: Arguments) => {
 		const args = await resolveEditVideoArgs(argv, options)
 		const progress = options.interactive
 			? createStepProgressReporter({ action: 'Editing video' })
@@ -216,7 +218,7 @@ export function createEditVideoHandler(options: CliUxOptions): CommandHandler {
 export function createCombineVideosHandler(
 	options: CliUxOptions,
 ): CommandHandler {
-	return async (argv) => {
+	return async (argv: Arguments) => {
 		const args = await resolveCombineVideosArgs(argv, options)
 		const progress = options.interactive
 			? createStepProgressReporter({ action: 'Combining videos' })
@@ -252,6 +254,9 @@ export function createCombineVideosHandler(
 					})
 					if (!result.success) {
 						throw new Error(result.error ?? 'Combine failed.')
+					}
+					if (!result.outputPath) {
+						throw new Error('Combine completed but no output path returned.')
 					}
 					outputPath = result.outputPath
 				} finally {
@@ -363,13 +368,13 @@ export async function runEditsCli(rawArgs = hideBin(process.argv)) {
 		.command(
 			'edit-video',
 			'Edit a single video using transcript text edits',
-			configureEditVideoCommand as CommandBuilder,
+			configureEditVideoCommand,
 			createEditVideoHandler(handlerOptions),
 		)
 		.command(
 			'combine-videos',
 			'Combine two videos with speech-aligned padding',
-			configureCombineVideosCommand as CommandBuilder,
+			configureCombineVideosCommand,
 			createCombineVideosHandler(handlerOptions),
 		)
 		.demandCommand(1)

@@ -60,6 +60,7 @@ function parseOutTimeValue(value: string) {
 	const parts = value.trim().split(':')
 	if (parts.length !== 3) return null
 	const [hours, minutes, seconds] = parts
+	if (!hours || !minutes || !seconds) return null
 	const h = Number.parseFloat(hours)
 	const m = Number.parseFloat(minutes)
 	const s = Number.parseFloat(seconds)
@@ -78,7 +79,11 @@ async function readLines(
 	onLine: (line: string) => void,
 ) {
 	if (!stream) return
-	const reader = stream.pipeThrough(new TextDecoderStream()).getReader()
+	const decoder = new TextDecoderStream()
+	const transformed = stream.pipeThrough(
+		decoder as unknown as ReadableWritablePair<string, Uint8Array>,
+	)
+	const reader = transformed.getReader()
 	let buffer = ''
 	while (true) {
 		const { value, done } = await reader.read()

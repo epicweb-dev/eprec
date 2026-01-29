@@ -595,8 +595,14 @@ export function TrimPoints(handle: Handle) {
 		trimRanges = sortRanges(
 			trimRanges.map((range) => {
 				if (range.id !== rangeId) return range
-				let nextStart = Number.isFinite(patch.start) ? patch.start : range.start
-				let nextEnd = Number.isFinite(patch.end) ? patch.end : range.end
+				let nextStart =
+					typeof patch.start === 'number' && Number.isFinite(patch.start)
+						? patch.start
+						: range.start
+				let nextEnd =
+					typeof patch.end === 'number' && Number.isFinite(patch.end)
+						? patch.end
+						: range.end
 				if (edge === 'start') {
 					nextStart = clamp(
 						nextStart,
