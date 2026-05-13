@@ -44,6 +44,37 @@ test('downloadWhisperModelFile retries rate-limited model downloads', async () =
 	expect(await Bun.file(modelPath).text()).toBe('model bytes')
 })
 
+test('downloadWhisperModelFile retries interrupted model downloads', async () => {
+	await using tempDir = await createTempDir()
+	const modelPath = path.join(tempDir.path, 'model.bin')
+	const delays: number[] = []
+	let calls = 0
+	const fetchModel = async () => {
+		calls++
+		if (calls === 1) {
+			return {
+				ok: true,
+				arrayBuffer: async () => {
+					throw new TypeError('body interrupted')
+				},
+			} as Response
+		}
+		return new Response('model bytes')
+	}
+
+	await downloadWhisperModelFile(modelPath, {
+		attemptCount: 2,
+		fetch: fetchModel,
+		sleep: async (delayMs) => {
+			delays.push(delayMs)
+		},
+	})
+
+	expect(calls).toBe(2)
+	expect(delays).toEqual([5000])
+	expect(await Bun.file(modelPath).text()).toBe('model bytes')
+})
+
 test('downloadWhisperModelFile does not retry permanent download failures', async () => {
 	await using tempDir = await createTempDir()
 	const modelPath = path.join(tempDir.path, 'model.bin')

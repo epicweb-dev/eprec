@@ -158,7 +158,7 @@ async function fetchModelBytes(options: ModelDownloadOptions) {
 					response.headers.get('retry-after'),
 				)
 			}
-			return response.arrayBuffer()
+			return await response.arrayBuffer()
 		} catch (error) {
 			lastError = error
 			if (!shouldRetryModelDownload(error) || attempt === attemptCount) {
