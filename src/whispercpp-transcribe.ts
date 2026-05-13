@@ -24,7 +24,7 @@ type TranscribeOptions = {
 
 type ModelDownloadOptions = {
 	progress?: StepProgressReporter
-	fetch?: typeof fetch
+	fetch?: (url: string, init?: RequestInit) => Promise<Response>
 	sleep?: (delayMs: number) => Promise<void>
 	attemptCount?: number
 }

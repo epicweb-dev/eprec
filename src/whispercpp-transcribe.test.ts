@@ -19,7 +19,7 @@ test('downloadWhisperModelFile retries rate-limited model downloads', async () =
 	const modelPath = path.join(tempDir.path, 'model.bin')
 	const delays: number[] = []
 	let calls = 0
-	const fetchModel: typeof fetch = async () => {
+	const fetchModel = async () => {
 		calls++
 		if (calls === 1) {
 			return new Response('rate limited', {
@@ -48,7 +48,7 @@ test('downloadWhisperModelFile does not retry permanent download failures', asyn
 	await using tempDir = await createTempDir()
 	const modelPath = path.join(tempDir.path, 'model.bin')
 	let calls = 0
-	const fetchModel: typeof fetch = async () => {
+	const fetchModel = async () => {
 		calls++
 		return new Response('missing', {
 			status: 404,
