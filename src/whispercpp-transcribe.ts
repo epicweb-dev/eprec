@@ -8,6 +8,10 @@ const DEFAULT_MODEL_URL =
 	'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin'
 const DEFAULT_LANGUAGE = 'en'
 const DEFAULT_BINARY = 'whisper-cli'
+const MODEL_DOWNLOAD_ATTEMPTS = 8
+const MODEL_DOWNLOAD_TIMEOUT_MS = 120_000
+const MODEL_DOWNLOAD_INITIAL_RETRY_DELAY_MS = 5_000
+const MODEL_DOWNLOAD_MAX_RETRY_DELAY_MS = 60_000
 
 type TranscribeOptions = {
 	modelPath?: string
@@ -16,6 +20,24 @@ type TranscribeOptions = {
 	binaryPath?: string
 	outputBasePath?: string
 	progress?: StepProgressReporter
+}
+
+type ModelDownloadOptions = {
+	progress?: StepProgressReporter
+	fetch?: (url: string, init?: RequestInit) => Promise<Response>
+	sleep?: (delayMs: number) => Promise<void>
+	attemptCount?: number
+}
+
+class ModelDownloadHttpError extends Error {
+	constructor(
+		readonly status: number,
+		readonly statusText: string,
+		readonly retryAfter: string | null,
+	) {
+		super(`Failed to download whisper.cpp model (${status} ${statusText}).`)
+		this.name = 'ModelDownloadHttpError'
+	}
 }
 
 export type TranscriptSegment = {
@@ -101,17 +123,100 @@ async function ensureModelFile(
 		throw new Error(`Whisper model not found at ${modelPath}.`)
 	}
 
-	progress?.setLabel('Downloading model')
+	await downloadWhisperModelFile(modelPath, { progress })
+}
+
+export async function downloadWhisperModelFile(
+	modelPath: string,
+	options: ModelDownloadOptions = {},
+) {
+	options.progress?.setLabel('Downloading model')
 	await mkdir(path.dirname(modelPath), { recursive: true })
-	const response = await fetch(DEFAULT_MODEL_URL)
-	if (!response.ok) {
-		throw new Error(
-			`Failed to download whisper.cpp model (${response.status} ${response.statusText}).`,
-		)
+
+	const bytes = await fetchModelBytes(options)
+	await Bun.write(modelPath, bytes)
+}
+
+async function fetchModelBytes(options: ModelDownloadOptions) {
+	const fetcher = options.fetch ?? fetch
+	const sleep = options.sleep ?? Bun.sleep
+	const attemptCount = Math.max(
+		1,
+		Math.floor(options.attemptCount ?? MODEL_DOWNLOAD_ATTEMPTS),
+	)
+	let lastError: unknown
+
+	for (let attempt = 1; attempt <= attemptCount; attempt++) {
+		try {
+			const response = await fetcher(DEFAULT_MODEL_URL, {
+				signal: AbortSignal.timeout(MODEL_DOWNLOAD_TIMEOUT_MS),
+			})
+			if (!response.ok) {
+				throw new ModelDownloadHttpError(
+					response.status,
+					response.statusText,
+					response.headers.get('retry-after'),
+				)
+			}
+			return await response.arrayBuffer()
+		} catch (error) {
+			lastError = error
+			if (!shouldRetryModelDownload(error) || attempt === attemptCount) {
+				break
+			}
+			await sleep(getModelDownloadRetryDelayMs(error, attempt))
+		}
 	}
 
-	const bytes = await response.arrayBuffer()
-	await Bun.write(modelPath, bytes)
+	if (lastError instanceof Error) {
+		throw lastError
+	}
+	throw new Error('Failed to download whisper.cpp model.')
+}
+
+function shouldRetryModelDownload(error: unknown) {
+	if (!(error instanceof ModelDownloadHttpError)) {
+		return true
+	}
+	return (
+		error.status === 408 ||
+		error.status === 425 ||
+		error.status === 429 ||
+		error.status >= 500
+	)
+}
+
+function getModelDownloadRetryDelayMs(error: unknown, attempt: number) {
+	if (error instanceof ModelDownloadHttpError) {
+		const retryAfterDelayMs = parseRetryAfterDelayMs(error.retryAfter)
+		if (retryAfterDelayMs !== null) {
+			return retryAfterDelayMs
+		}
+	}
+	return Math.min(
+		MODEL_DOWNLOAD_INITIAL_RETRY_DELAY_MS * 2 ** (attempt - 1),
+		MODEL_DOWNLOAD_MAX_RETRY_DELAY_MS,
+	)
+}
+
+function parseRetryAfterDelayMs(retryAfter: string | null) {
+	if (!retryAfter) {
+		return null
+	}
+
+	const seconds = Number(retryAfter)
+	if (Number.isFinite(seconds) && seconds >= 0) {
+		return Math.min(seconds * 1000, MODEL_DOWNLOAD_MAX_RETRY_DELAY_MS)
+	}
+
+	const retryAt = Date.parse(retryAfter)
+	if (Number.isNaN(retryAt)) {
+		return null
+	}
+	return Math.min(
+		Math.max(0, retryAt - Date.now()),
+		MODEL_DOWNLOAD_MAX_RETRY_DELAY_MS,
+	)
 }
 
 async function readTranscriptText(transcriptPath: string, fallback: string) {
