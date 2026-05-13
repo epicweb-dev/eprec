@@ -52,12 +52,11 @@ test('downloadWhisperModelFile retries interrupted model downloads', async () =>
 	const fetchModel = async () => {
 		calls++
 		if (calls === 1) {
-			return {
-				ok: true,
-				arrayBuffer: async () => {
-					throw new TypeError('body interrupted')
-				},
-			} as Response
+			const response = new Response('partial model bytes')
+			response.arrayBuffer = async () => {
+				throw new TypeError('body interrupted')
+			}
+			return response
 		}
 		return new Response('model bytes')
 	}
