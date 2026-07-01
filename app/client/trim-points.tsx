@@ -388,7 +388,8 @@ export function TrimPoints(handle: Handle) {
 	}
 
 	const loadWaveform = async (url: string) => {
-		if (!url || waveformStatus === 'loading') return
+		if (!url) return
+		if (waveformSource === url && waveformStatus === 'loading') return
 		if (waveformSource === url && waveformStatus === 'ready') return
 		waveformSource = url
 		waveformStatus = 'loading'
