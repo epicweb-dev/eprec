@@ -45,6 +45,7 @@ function normalizeProps(props: ElementProps | null | undefined) {
 		on: eventHandlers,
 		...nextProps
 	} = props as LegacyProps
+	const nextMix = Array.isArray(mix) ? [...mix] : mix ? [mix] : []
 	const legacyMix = []
 
 	if (cssProps) {
@@ -63,8 +64,8 @@ function normalizeProps(props: ElementProps | null | undefined) {
 		}
 	}
 
-	if (legacyMix.length > 0) {
-		nextProps.mix = mix ? [mix, ...legacyMix] : legacyMix
+	if (legacyMix.length > 0 || nextMix.length > 0) {
+		nextProps.mix = [...nextMix, ...legacyMix]
 	}
 
 	return nextProps
