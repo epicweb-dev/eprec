@@ -1,4 +1,4 @@
-import type { Handle } from 'remix/component'
+import { on, ref, type Handle } from 'remix/ui'
 import {
 	buildFfmpegCommandPreview,
 	computeOutputDuration,
@@ -388,7 +388,8 @@ export function TrimPoints(handle: Handle) {
 	}
 
 	const loadWaveform = async (url: string) => {
-		if (!url || waveformStatus === 'loading') return
+		if (!url) return
+		if (waveformSource === url && waveformStatus === 'loading') return
 		if (waveformSource === url && waveformStatus === 'ready') return
 		waveformSource = url
 		waveformStatus = 'loading'
@@ -994,12 +995,12 @@ export function TrimPoints(handle: Handle) {
 									type="text"
 									placeholder="/path/to/video.mp4"
 									value={videoPathInput}
-									on={{
-										input: (event) => {
+									mix={[
+										on<HTMLInputElement>('input', (event) => {
 											const target = event.currentTarget as HTMLInputElement
 											updateVideoPathInput(target.value)
-										},
-									}}
+										}),
+									]}
 								/>
 							</label>
 							<label class="input-label">
@@ -1009,12 +1010,12 @@ export function TrimPoints(handle: Handle) {
 									type="text"
 									placeholder="/path/to/video.trimmed.mp4"
 									value={outputPathInput}
-									on={{
-										input: (event) => {
+									mix={[
+										on<HTMLInputElement>('input', (event) => {
 											const target = event.currentTarget as HTMLInputElement
 											updateOutputPathInput(target.value)
-										},
-									}}
+										}),
+									]}
 								/>
 							</label>
 							<div class="source-actions">
@@ -1022,14 +1023,19 @@ export function TrimPoints(handle: Handle) {
 									class="button button--primary"
 									type="button"
 									disabled={pathStatus === 'loading'}
-									on={{ click: () => void loadVideoFromPath() }}
+									mix={[
+										on<HTMLButtonElement>(
+											'click',
+											() => void loadVideoFromPath(),
+										),
+									]}
 								>
 									{pathStatus === 'loading' ? 'Checking...' : 'Load video'}
 								</button>
 								<button
 									class="button button--ghost"
 									type="button"
-									on={{ click: loadDemoVideo }}
+									mix={[on<HTMLButtonElement>('click', loadDemoVideo)]}
 								>
 									Use demo video
 								</button>
@@ -1052,67 +1058,69 @@ export function TrimPoints(handle: Handle) {
 								src={previewUrl}
 								controls
 								preload="metadata"
-								connect={(node: HTMLVideoElement, signal) => {
-									previewNode = node
-									const handleLoaded = () => {
-										const nextDuration = Number(node.duration)
-										previewDuration = Number.isFinite(nextDuration)
-											? nextDuration
-											: 0
-										previewReady = previewDuration > 0
-										previewError = ''
-										playhead = clamp(playhead, 0, previewDuration)
-										normalizeZoomState({ focusTime: playhead })
-										if (!isTimeEditing) {
-											timeInputValue = formatTimestamp(playhead)
+								mix={[
+									ref<HTMLVideoElement>((node, signal) => {
+										previewNode = node
+										const handleLoaded = () => {
+											const nextDuration = Number(node.duration)
+											previewDuration = Number.isFinite(nextDuration)
+												? nextDuration
+												: 0
+											previewReady = previewDuration > 0
+											previewError = ''
+											playhead = clamp(playhead, 0, previewDuration)
+											normalizeZoomState({ focusTime: playhead })
+											if (!isTimeEditing) {
+												timeInputValue = formatTimestamp(playhead)
+											}
+											if (
+												Math.abs(node.currentTime - playhead) > 0.02 &&
+												previewReady
+											) {
+												node.currentTime = playhead
+											}
+											void loadWaveform(previewUrl)
+											handle.update()
 										}
-										if (
-											Math.abs(node.currentTime - playhead) > 0.02 &&
-											previewReady
-										) {
-											node.currentTime = playhead
+										const handleTimeUpdate = () => {
+											if (!previewReady || previewDuration <= 0) return
+											playhead = clamp(node.currentTime, 0, previewDuration)
+											if (!isTimeEditing) {
+												timeInputValue = formatTimestamp(playhead)
+											}
+											ensurePlayheadVisible()
+											handle.update()
 										}
-										void loadWaveform(previewUrl)
-										handle.update()
-									}
-									const handleTimeUpdate = () => {
-										if (!previewReady || previewDuration <= 0) return
-										playhead = clamp(node.currentTime, 0, previewDuration)
-										if (!isTimeEditing) {
-											timeInputValue = formatTimestamp(playhead)
+										const handlePlay = () => {
+											previewPlaying = true
+											handle.update()
 										}
-										ensurePlayheadVisible()
-										handle.update()
-									}
-									const handlePlay = () => {
-										previewPlaying = true
-										handle.update()
-									}
-									const handlePause = () => {
-										previewPlaying = false
-										handle.update()
-									}
-									const handleError = () => {
-										previewError = 'Unable to load the preview video.'
-										previewReady = false
-										handle.update()
-									}
-									node.addEventListener('loadedmetadata', handleLoaded)
-									node.addEventListener('timeupdate', handleTimeUpdate)
-									node.addEventListener('play', handlePlay)
-									node.addEventListener('pause', handlePause)
-									node.addEventListener('error', handleError)
-									signal.addEventListener('abort', () => {
-										node.removeEventListener('loadedmetadata', handleLoaded)
-										node.removeEventListener('timeupdate', handleTimeUpdate)
-										node.removeEventListener('play', handlePlay)
-										node.removeEventListener('pause', handlePause)
-										node.removeEventListener('error', handleError)
-										if (previewNode === node) {
-											previewNode = null
+										const handlePause = () => {
+											previewPlaying = false
+											handle.update()
 										}
-									})
-								}}
+										const handleError = () => {
+											previewError = 'Unable to load the preview video.'
+											previewReady = false
+											handle.update()
+										}
+										node.addEventListener('loadedmetadata', handleLoaded)
+										node.addEventListener('timeupdate', handleTimeUpdate)
+										node.addEventListener('play', handlePlay)
+										node.addEventListener('pause', handlePause)
+										node.addEventListener('error', handleError)
+										signal.addEventListener('abort', () => {
+											node.removeEventListener('loadedmetadata', handleLoaded)
+											node.removeEventListener('timeupdate', handleTimeUpdate)
+											node.removeEventListener('play', handlePlay)
+											node.removeEventListener('pause', handlePause)
+											node.removeEventListener('error', handleError)
+											if (previewNode === node) {
+												previewNode = null
+											}
+										})
+									}),
+								]}
 							/>
 							{previewError ? (
 								<p class="status-note status-note--danger">{previewError}</p>
@@ -1126,17 +1134,17 @@ export function TrimPoints(handle: Handle) {
 										placeholder="00:00.00"
 										value={timeInputValue}
 										disabled={!previewReady}
-										on={{
-											focus: () => {
+										mix={[
+											on<HTMLInputElement>('focus', () => {
 												isTimeEditing = true
 												handle.update()
-											},
-											input: (event) => {
+											}),
+											on<HTMLInputElement>('input', (event) => {
 												const target = event.currentTarget as HTMLInputElement
 												updateTimeInput(target.value)
-											},
-											blur: () => commitTimeInput(),
-											keydown: (event) => {
+											}),
+											on<HTMLInputElement>('blur', () => commitTimeInput()),
+											on<HTMLInputElement, 'keydown'>('keydown', (event) => {
 												if (event.key === 'Enter') {
 													event.preventDefault()
 													commitTimeInput()
@@ -1147,8 +1155,8 @@ export function TrimPoints(handle: Handle) {
 													timeInputValue = formatTimestamp(playhead)
 													handle.update()
 												}
-											},
-										}}
+											}),
+										]}
 									/>
 								</label>
 								<span class="summary-subtext">
@@ -1172,7 +1180,7 @@ export function TrimPoints(handle: Handle) {
 							class="button button--primary"
 							type="button"
 							disabled={!previewReady}
-							on={{ click: addTrimRange }}
+							mix={[on<HTMLButtonElement>('click', addTrimRange)]}
 						>
 							Add trim range
 						</button>
@@ -1188,33 +1196,35 @@ export function TrimPoints(handle: Handle) {
 							!previewReady && 'trim-track--disabled',
 							previewReady && 'trim-track--interactive',
 						)}
-						connect={(node: HTMLDivElement) => {
-							trackNode = node
-						}}
 						style={`--playhead:${playheadPercent}%`}
-						on={{
-							pointerdown: (event) => {
+						mix={[
+							ref<HTMLDivElement>((node) => {
+								trackNode = node
+							}),
+							on<HTMLDivElement, 'pointerdown'>('pointerdown', (event) => {
 								if (event.currentTarget !== event.target) return
 								const nextTime = getTimeFromClientX(event.clientX)
 								setPlayhead(nextTime)
-							},
-						}}
+							}),
+						]}
 					>
 						<canvas
 							class="trim-waveform"
-							connect={(node: HTMLCanvasElement, signal) => {
-								waveformNode = node
-								drawWaveform()
-								if (typeof ResizeObserver === 'undefined') return
-								const observer = new ResizeObserver(() => drawWaveform())
-								observer.observe(node)
-								signal.addEventListener('abort', () => {
-									observer.disconnect()
-									if (waveformNode === node) {
-										waveformNode = null
-									}
-								})
-							}}
+							mix={[
+								ref<HTMLCanvasElement>((node, signal) => {
+									waveformNode = node
+									drawWaveform()
+									if (typeof ResizeObserver === 'undefined') return
+									const observer = new ResizeObserver(() => drawWaveform())
+									observer.observe(node)
+									signal.addEventListener('abort', () => {
+										observer.disconnect()
+										if (waveformNode === node) {
+											waveformNode = null
+										}
+									})
+								}),
+							]}
 						/>
 						{visibleRanges.map((entry) => (
 							<div
@@ -1225,7 +1235,11 @@ export function TrimPoints(handle: Handle) {
 									entry.clippedEnd && 'trim-range--clipped-end',
 								)}
 								style={`--range-left:${entry.left}%; --range-width:${entry.width}%`}
-								on={{ click: () => selectRange(entry.range.id) }}
+								mix={[
+									on<HTMLDivElement>('click', () =>
+										selectRange(entry.range.id),
+									),
+								]}
 								role="group"
 								aria-label={`Trim range ${formatTimestamp(entry.range.start)} to ${formatTimestamp(entry.range.end)}`}
 							>
@@ -1248,19 +1262,32 @@ export function TrimPoints(handle: Handle) {
 											aria-valuenow={entry.range.start}
 											aria-valuetext={formatTimestamp(entry.range.start)}
 											aria-describedby={hintId}
-											on={{
-												focus: () =>
+											mix={[
+												on<HTMLButtonElement>('focus', () =>
 													syncVideoToTime(entry.range.start, {
 														updateInput: true,
 													}),
-												pointerdown: (event) =>
-													startDrag(event, entry.range.id, 'start'),
-												pointermove: moveDrag,
-												pointerup: endDrag,
-												pointercancel: endDrag,
-												keydown: (event) =>
+												),
+												on<HTMLButtonElement, 'pointerdown'>(
+													'pointerdown',
+													(event) => startDrag(event, entry.range.id, 'start'),
+												),
+												on<HTMLButtonElement, 'pointermove'>(
+													'pointermove',
+													moveDrag,
+												),
+												on<HTMLButtonElement, 'pointerup'>(
+													'pointerup',
+													endDrag,
+												),
+												on<HTMLButtonElement, 'pointercancel'>(
+													'pointercancel',
+													endDrag,
+												),
+												on<HTMLButtonElement, 'keydown'>('keydown', (event) =>
 													handleRangeKey(event, entry.range, 'start'),
-											}}
+												),
+											]}
 										/>
 									</>
 								) : null}
@@ -1279,19 +1306,32 @@ export function TrimPoints(handle: Handle) {
 											aria-valuenow={entry.range.end}
 											aria-valuetext={formatTimestamp(entry.range.end)}
 											aria-describedby={hintId}
-											on={{
-												focus: () =>
+											mix={[
+												on<HTMLButtonElement>('focus', () =>
 													syncVideoToTime(entry.range.end, {
 														updateInput: true,
 													}),
-												pointerdown: (event) =>
-													startDrag(event, entry.range.id, 'end'),
-												pointermove: moveDrag,
-												pointerup: endDrag,
-												pointercancel: endDrag,
-												keydown: (event) =>
+												),
+												on<HTMLButtonElement, 'pointerdown'>(
+													'pointerdown',
+													(event) => startDrag(event, entry.range.id, 'end'),
+												),
+												on<HTMLButtonElement, 'pointermove'>(
+													'pointermove',
+													moveDrag,
+												),
+												on<HTMLButtonElement, 'pointerup'>(
+													'pointerup',
+													endDrag,
+												),
+												on<HTMLButtonElement, 'pointercancel'>(
+													'pointercancel',
+													endDrag,
+												),
+												on<HTMLButtonElement, 'keydown'>('keydown', (event) =>
 													handleRangeKey(event, entry.range, 'end'),
-											}}
+												),
+											]}
 										/>
 									</>
 								) : null}
@@ -1338,22 +1378,22 @@ export function TrimPoints(handle: Handle) {
 							step={PLAYHEAD_STEP}
 							value={playhead}
 							disabled={!previewReady}
-							on={{
-								input: (event) => {
+							mix={[
+								on<HTMLInputElement>('input', (event) => {
 									const target = event.currentTarget as HTMLInputElement
 									setPlayhead(Number(target.value))
-								},
-							}}
+								}),
+							]}
 						/>
 						<button
 							class="button button--ghost"
 							type="button"
 							disabled={!previewReady || sortedRanges.length === 0}
-							on={{
-								click: () => {
+							mix={[
+								on<HTMLButtonElement>('click', () => {
 									jumpToPrevTrim()
-								},
-							}}
+								}),
+							]}
 						>
 							Prev trim
 						</button>
@@ -1361,11 +1401,11 @@ export function TrimPoints(handle: Handle) {
 							class="button button--ghost"
 							type="button"
 							disabled={!previewReady || sortedRanges.length === 0}
-							on={{
-								click: () => {
+							mix={[
+								on<HTMLButtonElement>('click', () => {
 									jumpToNextTrim()
-								},
-							}}
+								}),
+							]}
 						>
 							Next trim
 						</button>
@@ -1380,7 +1420,7 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady}
-								on={{ click: jumpToStart }}
+								mix={[on<HTMLButtonElement>('click', jumpToStart)]}
 							>
 								Start
 							</button>
@@ -1388,7 +1428,11 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady}
-								on={{ click: () => nudgePlayhead(-NAVIGATION_STEP) }}
+								mix={[
+									on<HTMLButtonElement>('click', () =>
+										nudgePlayhead(-NAVIGATION_STEP),
+									),
+								]}
 							>
 								-{NAVIGATION_STEP}s
 							</button>
@@ -1396,7 +1440,11 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady}
-								on={{ click: () => nudgePlayhead(NAVIGATION_STEP) }}
+								mix={[
+									on<HTMLButtonElement>('click', () =>
+										nudgePlayhead(NAVIGATION_STEP),
+									),
+								]}
 							>
 								+{NAVIGATION_STEP}s
 							</button>
@@ -1404,7 +1452,7 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady}
-								on={{ click: jumpToEnd }}
+								mix={[on<HTMLButtonElement>('click', jumpToEnd)]}
 							>
 								End
 							</button>
@@ -1414,7 +1462,11 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady}
-								on={{ click: () => centerWindowOnTime(playhead) }}
+								mix={[
+									on<HTMLButtonElement>('click', () =>
+										centerWindowOnTime(playhead),
+									),
+								]}
 							>
 								Center view
 							</button>
@@ -1422,7 +1474,7 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady || !selectedRangeId}
-								on={{ click: zoomToSelectedRange }}
+								mix={[on<HTMLButtonElement>('click', zoomToSelectedRange)]}
 							>
 								Zoom to selection
 							</button>
@@ -1438,7 +1490,11 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady || zoomLevel <= MIN_ZOOM}
-								on={{ click: () => setZoom(zoomLevel - ZOOM_STEP) }}
+								mix={[
+									on<HTMLButtonElement>('click', () =>
+										setZoom(zoomLevel - ZOOM_STEP),
+									),
+								]}
 							>
 								-
 							</button>
@@ -1450,18 +1506,22 @@ export function TrimPoints(handle: Handle) {
 								step={ZOOM_STEP}
 								value={zoomLevel}
 								disabled={!previewReady}
-								on={{
-									input: (event) => {
+								mix={[
+									on<HTMLInputElement>('input', (event) => {
 										const target = event.currentTarget as HTMLInputElement
 										setZoom(Number(target.value))
-									},
-								}}
+									}),
+								]}
 							/>
 							<button
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady || zoomLevel >= MAX_ZOOM}
-								on={{ click: () => setZoom(zoomLevel + ZOOM_STEP) }}
+								mix={[
+									on<HTMLButtonElement>('click', () =>
+										setZoom(zoomLevel + ZOOM_STEP),
+									),
+								]}
 							>
 								+
 							</button>
@@ -1471,7 +1531,11 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady}
-								on={{ click: () => setZoom(MIN_ZOOM, playhead) }}
+								mix={[
+									on<HTMLButtonElement>('click', () =>
+										setZoom(MIN_ZOOM, playhead),
+									),
+								]}
 							>
 								Fit
 							</button>
@@ -1490,19 +1554,19 @@ export function TrimPoints(handle: Handle) {
 							step={windowStep}
 							value={zoomWindowStart}
 							disabled={!previewReady || windowDuration <= 0}
-							on={{
-								input: (event) => {
+							mix={[
+								on<HTMLInputElement>('input', (event) => {
 									const target = event.currentTarget as HTMLInputElement
 									setWindowStart(Number(target.value))
-								},
-							}}
+								}),
+							]}
 						/>
 						<div class="timeline-action-group">
 							<button
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady || windowDuration <= 0}
-								on={{ click: () => panWindow(-1) }}
+								mix={[on<HTMLButtonElement>('click', () => panWindow(-1))]}
 							>
 								Prev view
 							</button>
@@ -1510,7 +1574,7 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={!previewReady || windowDuration <= 0}
-								on={{ click: () => panWindow(1) }}
+								mix={[on<HTMLButtonElement>('click', () => panWindow(1))]}
 							>
 								Next view
 							</button>
@@ -1541,7 +1605,11 @@ export function TrimPoints(handle: Handle) {
 										<button
 											class="trim-range-summary"
 											type="button"
-											on={{ click: () => selectRange(range.id) }}
+											mix={[
+												on<HTMLButtonElement>('click', () =>
+													selectRange(range.id),
+												),
+											]}
 										>
 											<span class="trim-range-time">
 												{formatTimestamp(range.start)} -{' '}
@@ -1561,12 +1629,13 @@ export function TrimPoints(handle: Handle) {
 													max={duration}
 													step={KEYBOARD_STEP}
 													value={range.start.toFixed(2)}
-													on={{
-														focus: () =>
+													mix={[
+														on<HTMLInputElement>('focus', () =>
 															syncVideoToTime(range.start, {
 																updateInput: true,
 															}),
-														input: (event) => {
+														),
+														on<HTMLInputElement>('input', (event) => {
 															const target =
 																event.currentTarget as HTMLInputElement
 															const nextValue = Number(target.value)
@@ -1579,10 +1648,12 @@ export function TrimPoints(handle: Handle) {
 															syncVideoToTime(nextValue, {
 																updateInput: true,
 															})
-														},
-														keydown: (event) =>
-															handleNumberKey(event, range, 'start'),
-													}}
+														}),
+														on<HTMLInputElement, 'keydown'>(
+															'keydown',
+															(event) => handleNumberKey(event, range, 'start'),
+														),
+													]}
 												/>
 											</label>
 											<label class="input-label">
@@ -1594,12 +1665,13 @@ export function TrimPoints(handle: Handle) {
 													max={duration}
 													step={KEYBOARD_STEP}
 													value={range.end.toFixed(2)}
-													on={{
-														focus: () =>
+													mix={[
+														on<HTMLInputElement>('focus', () =>
 															syncVideoToTime(range.end, {
 																updateInput: true,
 															}),
-														input: (event) => {
+														),
+														on<HTMLInputElement>('input', (event) => {
 															const target =
 																event.currentTarget as HTMLInputElement
 															const nextValue = Number(target.value)
@@ -1612,16 +1684,22 @@ export function TrimPoints(handle: Handle) {
 															syncVideoToTime(nextValue, {
 																updateInput: true,
 															})
-														},
-														keydown: (event) =>
-															handleNumberKey(event, range, 'end'),
-													}}
+														}),
+														on<HTMLInputElement, 'keydown'>(
+															'keydown',
+															(event) => handleNumberKey(event, range, 'end'),
+														),
+													]}
 												/>
 											</label>
 											<button
 												class="button button--ghost"
 												type="button"
-												on={{ click: () => removeTrimRange(range.id) }}
+												mix={[
+													on<HTMLButtonElement>('click', () =>
+														removeTrimRange(range.id),
+													),
+												]}
 											>
 												Remove
 											</button>
@@ -1674,7 +1752,7 @@ export function TrimPoints(handle: Handle) {
 								class="button button--primary"
 								type="button"
 								disabled={runStatus === 'running' || !commandPreview}
-								on={{ click: runTrimCommand }}
+								mix={[on<HTMLButtonElement>('click', runTrimCommand)]}
 							>
 								{runStatus === 'running' ? 'Running...' : 'Run ffmpeg'}
 							</button>
@@ -1682,7 +1760,7 @@ export function TrimPoints(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={runStatus !== 'running'}
-								on={{ click: cancelRun }}
+								mix={[on<HTMLButtonElement>('click', cancelRun)]}
 							>
 								Cancel
 							</button>

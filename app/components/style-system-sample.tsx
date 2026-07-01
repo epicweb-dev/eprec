@@ -1,3 +1,4 @@
+import { css } from 'remix/ui'
 import {
 	colors,
 	mq,
@@ -9,31 +10,31 @@ import {
 	typography,
 } from '../styles/tokens.ts'
 
-const sectionStyle = {
+const sectionStyle = css({
 	display: 'flex',
 	flexDirection: 'column',
 	gap: spacing.lg,
 	marginTop: responsive.spacingSection,
-}
+})
 
-const headerStyle = {
+const headerStyle = css({
 	display: 'flex',
 	alignItems: 'center',
 	justifyContent: 'space-between',
 	gap: spacing.md,
 	flexWrap: 'wrap',
-}
+})
 
-const gridStyle = {
+const gridStyle = css({
 	display: 'grid',
 	gap: spacing.lg,
 	gridTemplateColumns: `repeat(auto-fit, minmax(${responsive.cardMinWidth}, 1fr))`,
 	[mq.mobile]: {
 		gridTemplateColumns: '1fr',
 	},
-}
+})
 
-const cardStyle = {
+const cardStyle = css({
 	padding: spacing.xl,
 	backgroundColor: colors.surface,
 	borderRadius: radius.lg,
@@ -50,9 +51,9 @@ const cardStyle = {
 	[mq.mobile]: {
 		padding: spacing.lg,
 	},
-}
+})
 
-const primaryButtonStyle = {
+const primaryButtonStyle = css({
 	display: 'inline-flex',
 	alignItems: 'center',
 	justifyContent: 'center',
@@ -74,119 +75,120 @@ const primaryButtonStyle = {
 		backgroundColor: colors.primaryActive,
 		transform: 'translateY(1px)',
 	},
-}
+})
 
-const pillStyle = {
+const pillStyle = css({
 	padding: `${spacing.xs} ${spacing.sm}`,
 	borderRadius: radius.pill,
 	backgroundColor: colors.infoSurface,
 	color: colors.infoText,
 	fontSize: typography.fontSize.xs,
 	fontWeight: typography.fontWeight.semibold,
-}
-
-const swatchStyle = (color: string) => ({
-	width: spacing.sm,
-	height: spacing.sm,
-	borderRadius: radius.xl,
-	backgroundColor: color,
-	boxShadow: `0 0 0 1px ${colors.border}`,
 })
+
+const swatchStyle = (color: string) =>
+	css({
+		width: spacing.sm,
+		height: spacing.sm,
+		borderRadius: radius.xl,
+		backgroundColor: color,
+		boxShadow: `0 0 0 1px ${colors.border}`,
+	})
 
 export function StyleSystemSample() {
 	return () => (
-		<section css={sectionStyle}>
-			<header css={headerStyle}>
+		<section mix={sectionStyle}>
+			<header mix={headerStyle}>
 				<div>
 					<h2
-						css={{
+						mix={css({
 							margin: 0,
 							fontSize: typography.fontSize.xl,
 							fontWeight: typography.fontWeight.semibold,
 							color: colors.text,
-						}}
+						})}
 					>
 						Design tokens
 					</h2>
 					<p
-						css={{
+						mix={css({
 							margin: 0,
 							color: colors.textMuted,
 							fontSize: typography.fontSize.base,
 							lineHeight: 1.6,
-						}}
+						})}
 					>
 						Shared CSS variables and TypeScript helpers for consistent theming.
 					</p>
 				</div>
-				<span css={pillStyle}>Auto dark mode</span>
+				<span mix={pillStyle}>Auto dark mode</span>
 			</header>
 
-			<div css={gridStyle}>
-				<div css={cardStyle}>
+			<div mix={gridStyle}>
+				<div mix={cardStyle}>
 					<h3
-						css={{
+						mix={css({
 							margin: 0,
 							fontSize: typography.fontSize.lg,
 							fontWeight: typography.fontWeight.semibold,
 							color: colors.text,
-						}}
+						})}
 					>
 						Surface card
 					</h3>
 					<p
-						css={{
+						mix={css({
 							margin: 0,
 							color: colors.textMuted,
 							fontSize: typography.fontSize.base,
 							lineHeight: 1.5,
-						}}
+						})}
 					>
 						Spacing, radius, and shadows come from tokens with responsive
 						overrides.
 					</p>
-					<button type="button" css={primaryButtonStyle}>
+					<button type="button" mix={primaryButtonStyle}>
 						Primary action
 					</button>
 				</div>
 
-				<div css={cardStyle}>
+				<div mix={cardStyle}>
 					<h3
-						css={{
+						mix={css({
 							margin: 0,
 							fontSize: typography.fontSize.lg,
 							fontWeight: typography.fontWeight.semibold,
 							color: colors.text,
-						}}
+						})}
 					>
 						Semantic palette
 					</h3>
 					<p
-						css={{
+						mix={css({
 							margin: 0,
 							color: colors.textMuted,
 							fontSize: typography.fontSize.base,
 							lineHeight: 1.5,
-						}}
+						})}
 					>
 						Use semantic names like primary, surface, and text instead of hex
 						values.
 					</p>
 					<div
-						css={{
+						mix={css({
 							display: 'flex',
 							gap: spacing.sm,
 							alignItems: 'center',
 							flexWrap: 'wrap',
 							color: colors.textSecondary,
 							fontSize: typography.fontSize.sm,
-						}}
+						})}
 					>
-						<span css={swatchStyle(colors.primary)} />
-						<span css={swatchStyle(colors.infoSurface)} />
-						<span css={swatchStyle(colors.successSurface)} />
-						<span css={swatchStyle(colors.warningSurface)} />
-						<span css={swatchStyle(colors.dangerSurface)} />
+						<span mix={swatchStyle(colors.primary)} />
+						<span mix={swatchStyle(colors.infoSurface)} />
+						<span mix={swatchStyle(colors.successSurface)} />
+						<span mix={swatchStyle(colors.warningSurface)} />
+						<span mix={swatchStyle(colors.dangerSurface)} />
 						<span>Primary, info, success, warning, danger</span>
 					</div>
 				</div>

@@ -34,8 +34,8 @@ feat!: change CLI argument format
 
 ## No React
 
-This application does NOT use React. We use `remix/component` for UI components.
-Do not introduce React, Preact, or any other UI framework.
+This application does NOT use React. We use `remix/ui` for UI components. Do not
+introduce React, Preact, or any other UI framework.
 
 ### Remix Components vs React Components
 
@@ -48,7 +48,7 @@ functionality receive a `Handle` as their first argument. Components that don't
 need the handle should omit it entirely:
 
 ```tsx
-import type { Handle } from 'remix/component'
+import { on, type Handle } from 'remix/ui'
 
 // Simple component that doesn't use the handle - no handle parameter needed
 function Greeting() {
@@ -66,12 +66,12 @@ function Counter(handle: Handle) {
 	return () => (
 		<div>
 			<button
-				on={{
-					click: () => {
+				mix={[
+					on<HTMLButtonElement>('click', () => {
 						count++
 						handle.update()
-					},
-				}}
+					}),
+				]}
 			>
 				Count: {count}
 			</button>
@@ -85,7 +85,7 @@ function Counter(handle: Handle) {
 For components that need state, use the closure above the return to store state:
 
 ```tsx
-import type { Handle } from 'remix/component'
+import { on, type Handle } from 'remix/ui'
 
 function Counter(handle: Handle) {
 	// State lives in the closure
@@ -101,7 +101,7 @@ function Counter(handle: Handle) {
 	return () => (
 		<div>
 			<span>Count: {count}</span>
-			<button on={{ click: increment }}>+</button>
+			<button mix={[on<HTMLButtonElement>('click', increment)]}>+</button>
 		</div>
 	)
 }
@@ -117,7 +117,7 @@ the returned function receives **regular props** (for rendering):
 > latest values. The setup prop is captured once at setup time and may be stale.
 
 ```tsx
-import type { Handle } from 'remix/component'
+import { css, type Handle } from 'remix/ui'
 
 function UserCard(
 	handle: Handle,
@@ -149,26 +149,36 @@ function UserCard(
 
 #### Event Handling
 
-Use `on={{ eventName: handler }}` instead of `onClick`:
+Use `mix` with the `on(...)` mixin instead of `onClick` or the removed
+`on={{ ... }}` prop:
 
 ```tsx
-<button on={{ click: handleClick }}>Click me</button>
-<input on={{ input: handleInput, blur: handleBlur }} />
+import { on } from 'remix/ui'
+
+<button mix={[on<HTMLButtonElement>('click', handleClick)]}>Click me</button>
+<input
+	mix={[
+		on<HTMLInputElement>('input', handleInput),
+		on<HTMLInputElement>('blur', handleBlur),
+	]}
+/>
 ```
 
 #### CSS-in-JS
 
-Use the `css` prop for inline styles with pseudo-selector support:
+Use `mix` with the `css(...)` mixin for static styles with pseudo-selector
+support. Use the standard `style` prop for dynamic CSS values.
 
 ```tsx
-<button
-	css={{
+import { css } from 'remix/ui'
+;<button
+	mix={css({
 		padding: '8px 16px',
 		backgroundColor: '#3b82f6',
 		'&:hover': {
 			backgroundColor: '#2563eb',
 		},
-	}}
+	})}
 >
 	Styled Button
 </button>
@@ -209,17 +219,19 @@ function DataLoader(handle: Handle) {
 }
 ```
 
-#### The `connect` Prop (No refs!)
+#### DOM references
 
-Remix components do **NOT** support React-style refs. Instead, use the `connect`
-prop to detect when an element has been added to the screen and get a reference
-to the DOM node.
+Remix components do **NOT** support React-style refs. Instead, use `mix` with
+the `ref(...)` mixin to detect when an element has been added to the screen and
+get a reference to the DOM node.
 
 ```tsx
+import { ref } from 'remix/ui'
+
 function MyComponent() {
 	return (
 		<div
-			connect={(node, signal) => {
+			mix={ref<HTMLDivElement>((node, signal) => {
 				// This runs when the element is added to the DOM
 				console.log('Element added to screen:', node)
 
@@ -227,7 +239,7 @@ function MyComponent() {
 				signal.addEventListener('abort', () => {
 					console.log('Element removed from screen')
 				})
-			}}
+			})}
 		>
 			Hello World
 		</div>
@@ -247,13 +259,15 @@ function MyComponent() {
 **Example with DOM manipulation:**
 
 ```tsx
+import { ref, type Handle } from 'remix/ui'
+
 function AutoFocusInput(handle: Handle) {
 	return () => (
 		<input
 			type="text"
-			connect={(input: HTMLInputElement) => {
+			mix={ref<HTMLInputElement>((input) => {
 				input.focus()
-			}}
+			})}
 		/>
 	)
 }
@@ -262,12 +276,14 @@ function AutoFocusInput(handle: Handle) {
 **Example with cleanup:**
 
 ```tsx
+import { ref, type Handle } from 'remix/ui'
+
 function ResizeAware(handle: Handle) {
 	let width = 0
 
 	return () => (
 		<div
-			connect={(node: HTMLDivElement, signal) => {
+			mix={ref<HTMLDivElement>((node, signal) => {
 				const observer = new ResizeObserver((entries) => {
 					width = entries[0].contentRect.width
 					handle.update()
@@ -277,7 +293,7 @@ function ResizeAware(handle: Handle) {
 				signal.addEventListener('abort', () => {
 					observer.disconnect()
 				})
-			}}
+			})}
 		>
 			Width: {width}px
 		</div>
@@ -297,7 +313,7 @@ A parent component provides context using `handle.context.set()`. The context
 type is declared as a generic parameter on `Handle`:
 
 ```tsx
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 
 function ThemeProvider(handle: Handle<{ theme: 'light' | 'dark' }>) {
 	// Set context value for all descendants
@@ -318,7 +334,7 @@ Descendant components retrieve context using `handle.context.get()`, passing the
 provider component as the key:
 
 ```tsx
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 
 function ThemedButton(handle: Handle) {
 	// Get context from nearest ancestor ThemeProvider
@@ -326,10 +342,10 @@ function ThemedButton(handle: Handle) {
 
 	return () => (
 		<button
-			css={{
+			mix={css({
 				background: theme?.theme === 'dark' ? '#333' : '#fff',
 				color: theme?.theme === 'dark' ? '#fff' : '#333',
-			}}
+			})}
 		>
 			Click me
 		</button>
@@ -351,7 +367,7 @@ function ThemedButton(handle: Handle) {
 **Full Example with Multiple Consumers:**
 
 ```tsx
-import type { Handle } from 'remix/component'
+import { css, type Handle } from 'remix/ui'
 
 // Provider component with typed context
 function UserProvider(
@@ -380,12 +396,12 @@ function UserBadge(handle: Handle) {
 
 	return () => (
 		<span
-			css={{
+			mix={css({
 				padding: '4px 8px',
 				background: ctx?.user.role === 'admin' ? '#ef4444' : '#3b82f6',
 				borderRadius: '4px',
 				color: 'white',
-			}}
+			})}
 		>
 			{ctx?.user.role}
 		</span>

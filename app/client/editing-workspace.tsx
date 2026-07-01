@@ -1,5 +1,5 @@
 import { matchSorter } from 'match-sorter'
-import type { Handle } from 'remix/component'
+import { on, ref, type Handle } from 'remix/ui'
 import {
 	sampleEditSession,
 	type ChapterPlan,
@@ -636,12 +636,12 @@ export function EditingWorkspace(handle: Handle) {
 									type="text"
 									placeholder="/path/to/video.mp4"
 									value={videoPathInput}
-									on={{
-										input: (event) => {
+									mix={[
+										on<HTMLInputElement>('input', (event) => {
 											const target = event.currentTarget as HTMLInputElement
 											updateVideoPathInput(target.value)
-										},
-									}}
+										}),
+									]}
 								/>
 							</label>
 							<div class="source-actions">
@@ -652,14 +652,19 @@ export function EditingWorkspace(handle: Handle) {
 										pathStatus === 'loading' ||
 										videoPathInput.trim().length === 0
 									}
-									on={{ click: () => void loadVideoFromPath() }}
+									mix={[
+										on<HTMLButtonElement>(
+											'click',
+											() => void loadVideoFromPath(),
+										),
+									]}
 								>
 									{pathStatus === 'loading' ? 'Checking...' : 'Load from path'}
 								</button>
 								<button
 									class="button button--ghost"
 									type="button"
-									on={{ click: resetToDemo }}
+									mix={[on<HTMLButtonElement>('click', resetToDemo)]}
 								>
 									Use demo video
 								</button>
@@ -758,7 +763,7 @@ export function EditingWorkspace(handle: Handle) {
 								disabled={
 									queueLoading || queuedCount === 0 || Boolean(runningTask)
 								}
-								on={{ click: startNextTask }}
+								mix={[on<HTMLButtonElement>('click', startNextTask)]}
 							>
 								Run next
 							</button>
@@ -766,7 +771,7 @@ export function EditingWorkspace(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={queueLoading || !runningTask}
-								on={{ click: markActiveDone }}
+								mix={[on<HTMLButtonElement>('click', markActiveDone)]}
 							>
 								Mark running done
 							</button>
@@ -774,13 +779,13 @@ export function EditingWorkspace(handle: Handle) {
 								class="button button--danger"
 								type="button"
 								disabled={queueLoading || !runningTask}
-								on={{
-									click: () => {
+								mix={[
+									on<HTMLButtonElement>('click', () => {
 										if (runningTask) {
 											cancelActiveTask(runningTask.id)
 										}
-									},
-								}}
+									}),
+								]}
 							>
 								Cancel running
 							</button>
@@ -788,7 +793,7 @@ export function EditingWorkspace(handle: Handle) {
 								class="button button--ghost"
 								type="button"
 								disabled={queueLoading || completedCount === 0}
-								on={{ click: clearCompletedTasks }}
+								mix={[on<HTMLButtonElement>('click', clearCompletedTasks)]}
 							>
 								Clear completed
 							</button>
@@ -806,12 +811,12 @@ export function EditingWorkspace(handle: Handle) {
 								<select
 									class="text-input"
 									value={primaryChapterId}
-									on={{
-										change: (event) => {
+									mix={[
+										on<HTMLSelectElement>('change', (event) => {
 											const target = event.currentTarget as HTMLSelectElement
 											updatePrimaryChapter(target.value)
-										},
-									}}
+										}),
+									]}
 								>
 									{chapters.map((chapter) => (
 										<option value={chapter.id}>{chapter.title}</option>
@@ -823,12 +828,12 @@ export function EditingWorkspace(handle: Handle) {
 								<select
 									class="text-input"
 									value={secondaryChapterId}
-									on={{
-										change: (event) => {
+									mix={[
+										on<HTMLSelectElement>('change', (event) => {
 											const target = event.currentTarget as HTMLSelectElement
 											updateSecondaryChapter(target.value)
-										},
-									}}
+										}),
+									]}
 								>
 									{chapters.map((chapter) => (
 										<option value={chapter.id}>{chapter.title}</option>
@@ -840,7 +845,7 @@ export function EditingWorkspace(handle: Handle) {
 									class="button button--primary"
 									type="button"
 									disabled={!primaryChapterId}
-									on={{ click: queueChapterEdit }}
+									mix={[on<HTMLButtonElement>('click', queueChapterEdit)]}
 								>
 									Edit chapter
 								</button>
@@ -848,7 +853,7 @@ export function EditingWorkspace(handle: Handle) {
 									class="button button--ghost"
 									type="button"
 									disabled={!canCombineChapters}
-									on={{ click: queueCombineChapters }}
+									mix={[on<HTMLButtonElement>('click', queueCombineChapters)]}
 								>
 									Combine chapters
 								</button>
@@ -867,14 +872,16 @@ export function EditingWorkspace(handle: Handle) {
 								<button
 									class="button button--ghost"
 									type="button"
-									on={{ click: queueTranscriptRegeneration }}
+									mix={[
+										on<HTMLButtonElement>('click', queueTranscriptRegeneration),
+									]}
 								>
 									Regenerate transcript
 								</button>
 								<button
 									class="button button--ghost"
 									type="button"
-									on={{ click: queueCommandScan }}
+									mix={[on<HTMLButtonElement>('click', queueCommandScan)]}
 								>
 									Detect command windows
 								</button>
@@ -893,14 +900,14 @@ export function EditingWorkspace(handle: Handle) {
 								<button
 									class="button button--ghost"
 									type="button"
-									on={{ click: queuePreviewRender }}
+									mix={[on<HTMLButtonElement>('click', queuePreviewRender)]}
 								>
 									Render preview clip
 								</button>
 								<button
 									class="button button--ghost"
 									type="button"
-									on={{ click: queueFinalExport }}
+									mix={[on<HTMLButtonElement>('click', queueFinalExport)]}
 								>
 									Export edited chapters
 								</button>
@@ -1002,7 +1009,11 @@ export function EditingWorkspace(handle: Handle) {
 													<button
 														class="button button--danger"
 														type="button"
-														on={{ click: () => cancelActiveTask(task.id) }}
+														mix={[
+															on<HTMLButtonElement>('click', () =>
+																cancelActiveTask(task.id),
+															),
+														]}
 													>
 														Cancel
 													</button>
@@ -1011,7 +1022,11 @@ export function EditingWorkspace(handle: Handle) {
 													<button
 														class="button button--ghost"
 														type="button"
-														on={{ click: () => removeTask(task.id) }}
+														mix={[
+															on<HTMLButtonElement>('click', () =>
+																removeTask(task.id),
+															),
+														]}
 													>
 														Remove
 													</button>
@@ -1037,7 +1052,7 @@ export function EditingWorkspace(handle: Handle) {
 						<button
 							class="button button--primary"
 							type="button"
-							on={{ click: addManualCut }}
+							mix={[on<HTMLButtonElement>('click', addManualCut)]}
 						>
 							Add cut at playhead
 						</button>
@@ -1064,66 +1079,68 @@ export function EditingWorkspace(handle: Handle) {
 									src={previewUrl}
 									controls
 									preload="metadata"
-									connect={(node: HTMLVideoElement, signal) => {
-										previewNode = node
-										const handleLoadedMetadata = () => {
-											const nextDuration = Number(node.duration)
-											previewDuration = Number.isFinite(nextDuration)
-												? nextDuration
-												: 0
-											previewReady = previewDuration > 0
-											previewError = ''
-											syncVideoToPlayhead(playhead)
-											handle.update()
-										}
-										const handleTimeUpdate = () => {
-											if (!previewReady || previewDuration <= 0) return
-											if (isScrubbing) return
-											if (!previewPlaying) return
-											const mapped =
-												(node.currentTime / previewDuration) * duration
-											if (Math.abs(mapped - lastSyncedPlayhead) <= 0.05) {
-												return
+									mix={[
+										ref<HTMLVideoElement>((node, signal) => {
+											previewNode = node
+											const handleLoadedMetadata = () => {
+												const nextDuration = Number(node.duration)
+												previewDuration = Number.isFinite(nextDuration)
+													? nextDuration
+													: 0
+												previewReady = previewDuration > 0
+												previewError = ''
+												syncVideoToPlayhead(playhead)
+												handle.update()
 											}
-											playhead = clamp(mapped, 0, duration)
-											handle.update()
-										}
-										const handlePlay = () => {
-											previewPlaying = true
-											handle.update()
-										}
-										const handlePause = () => {
-											previewPlaying = false
-											handle.update()
-										}
-										const handleError = () => {
-											previewError = 'Unable to load the preview video.'
-											previewReady = false
-											previewPlaying = false
-											handle.update()
-										}
-										node.addEventListener(
-											'loadedmetadata',
-											handleLoadedMetadata,
-										)
-										node.addEventListener('timeupdate', handleTimeUpdate)
-										node.addEventListener('play', handlePlay)
-										node.addEventListener('pause', handlePause)
-										node.addEventListener('error', handleError)
-										signal.addEventListener('abort', () => {
-											node.removeEventListener(
+											const handleTimeUpdate = () => {
+												if (!previewReady || previewDuration <= 0) return
+												if (isScrubbing) return
+												if (!previewPlaying) return
+												const mapped =
+													(node.currentTime / previewDuration) * duration
+												if (Math.abs(mapped - lastSyncedPlayhead) <= 0.05) {
+													return
+												}
+												playhead = clamp(mapped, 0, duration)
+												handle.update()
+											}
+											const handlePlay = () => {
+												previewPlaying = true
+												handle.update()
+											}
+											const handlePause = () => {
+												previewPlaying = false
+												handle.update()
+											}
+											const handleError = () => {
+												previewError = 'Unable to load the preview video.'
+												previewReady = false
+												previewPlaying = false
+												handle.update()
+											}
+											node.addEventListener(
 												'loadedmetadata',
 												handleLoadedMetadata,
 											)
-											node.removeEventListener('timeupdate', handleTimeUpdate)
-											node.removeEventListener('play', handlePlay)
-											node.removeEventListener('pause', handlePause)
-											node.removeEventListener('error', handleError)
-											if (previewNode === node) {
-												previewNode = null
-											}
-										})
-									}}
+											node.addEventListener('timeupdate', handleTimeUpdate)
+											node.addEventListener('play', handlePlay)
+											node.addEventListener('pause', handlePause)
+											node.addEventListener('error', handleError)
+											signal.addEventListener('abort', () => {
+												node.removeEventListener(
+													'loadedmetadata',
+													handleLoadedMetadata,
+												)
+												node.removeEventListener('timeupdate', handleTimeUpdate)
+												node.removeEventListener('play', handlePlay)
+												node.removeEventListener('pause', handlePause)
+												node.removeEventListener('error', handleError)
+												if (previewNode === node) {
+													previewNode = null
+												}
+											})
+										}),
+									]}
 								/>
 								<div class="timeline-video-meta">
 									<span>Preview {formatTimestamp(previewTime)}</span>
@@ -1150,7 +1167,11 @@ export function EditingWorkspace(handle: Handle) {
 											range.id === selectedRangeId && 'is-selected',
 										)}
 										style={`--range-left:${(range.start / duration) * 100}%; --range-width:${((range.end - range.start) / duration) * 100}%`}
-										on={{ click: () => selectRange(range.id) }}
+										mix={[
+											on<HTMLButtonElement>('click', () =>
+												selectRange(range.id),
+											),
+										]}
 										title={`${range.reason} (${formatTimestamp(range.start)} - ${formatTimestamp(range.end)})`}
 									/>
 								))}
@@ -1173,43 +1194,43 @@ export function EditingWorkspace(handle: Handle) {
 									max={duration}
 									step={PLAYHEAD_STEP}
 									value={playhead}
-									on={{
-										input: (event) => {
+									mix={[
+										on<HTMLInputElement>('input', (event) => {
 											const target = event.currentTarget as HTMLInputElement
 											startScrubbing()
 											setPlayhead(Number(target.value))
-										},
-										pointerdown: startScrubbing,
-										pointerup: stopScrubbing,
-										pointercancel: stopScrubbing,
-										keydown: startScrubbing,
-										keyup: stopScrubbing,
-										blur: stopScrubbing,
-									}}
+										}),
+										on<HTMLInputElement>('pointerdown', startScrubbing),
+										on<HTMLInputElement>('pointerup', stopScrubbing),
+										on<HTMLInputElement>('pointercancel', stopScrubbing),
+										on<HTMLInputElement>('keydown', startScrubbing),
+										on<HTMLInputElement>('keyup', stopScrubbing),
+										on<HTMLInputElement>('blur', stopScrubbing),
+									]}
 								/>
 								<button
 									class="button button--ghost"
 									type="button"
-									on={{
-										click: () => {
+									mix={[
+										on<HTMLButtonElement>('click', () => {
 											const previous = findPreviousCut(sortedCuts, playhead)
 											if (previous) setPlayhead(previous.start)
-										},
-									}}
+										}),
+									]}
 								>
 									Prev cut
 								</button>
 								<button
 									class="button button--ghost"
 									type="button"
-									on={{
-										click: () => {
+									mix={[
+										on<HTMLButtonElement>('click', () => {
 											const next = sortedCuts.find(
 												(range) => range.start > playhead,
 											)
 											if (next) setPlayhead(next.start)
-										},
-									}}
+										}),
+									]}
 								>
 									Next cut
 								</button>
@@ -1243,14 +1264,14 @@ export function EditingWorkspace(handle: Handle) {
 											max={duration}
 											step="0.1"
 											value={selectedRange.start.toFixed(2)}
-											on={{
-												input: (event) => {
+											mix={[
+												on<HTMLInputElement>('input', (event) => {
 													const target = event.currentTarget as HTMLInputElement
 													updateCutRange(selectedRange.id, {
 														start: Number(target.value),
 													})
-												},
-											}}
+												}),
+											]}
 										/>
 									</label>
 									<label class="input-label">
@@ -1262,14 +1283,14 @@ export function EditingWorkspace(handle: Handle) {
 											max={duration}
 											step="0.1"
 											value={selectedRange.end.toFixed(2)}
-											on={{
-												input: (event) => {
+											mix={[
+												on<HTMLInputElement>('input', (event) => {
 													const target = event.currentTarget as HTMLInputElement
 													updateCutRange(selectedRange.id, {
 														end: Number(target.value),
 													})
-												},
-											}}
+												}),
+											]}
 										/>
 									</label>
 									<label class="input-label input-label--full">
@@ -1278,20 +1299,24 @@ export function EditingWorkspace(handle: Handle) {
 											class="text-input"
 											type="text"
 											value={selectedRange.reason}
-											on={{
-												input: (event) => {
+											mix={[
+												on<HTMLInputElement>('input', (event) => {
 													const target = event.currentTarget as HTMLInputElement
 													updateCutRange(selectedRange.id, {
 														reason: target.value,
 													})
-												},
-											}}
+												}),
+											]}
 										/>
 									</label>
 									<button
 										class="button button--danger"
 										type="button"
-										on={{ click: () => removeCut(selectedRange.id) }}
+										mix={[
+											on<HTMLButtonElement>('click', () =>
+												removeCut(selectedRange.id),
+											),
+										]}
 									>
 										Remove cut
 									</button>
@@ -1315,7 +1340,11 @@ export function EditingWorkspace(handle: Handle) {
 										<button
 											class="cut-select"
 											type="button"
-											on={{ click: () => selectRange(range.id) }}
+											mix={[
+												on<HTMLButtonElement>('click', () =>
+													selectRange(range.id),
+												),
+											]}
 										>
 											<span class="cut-time">
 												{formatTimestamp(range.start)} -{' '}
@@ -1326,7 +1355,11 @@ export function EditingWorkspace(handle: Handle) {
 										<button
 											class="button button--ghost"
 											type="button"
-											on={{ click: () => removeCut(range.id) }}
+											mix={[
+												on<HTMLButtonElement>('click', () =>
+													removeCut(range.id),
+												),
+											]}
 										>
 											Remove
 										</button>
@@ -1371,12 +1404,12 @@ export function EditingWorkspace(handle: Handle) {
 											class="text-input"
 											type="text"
 											value={chapter.outputName}
-											on={{
-												input: (event) => {
+											mix={[
+												on<HTMLInputElement>('input', (event) => {
 													const target = event.currentTarget as HTMLInputElement
 													updateChapterOutput(chapter.id, target.value)
-												},
-											}}
+												}),
+											]}
 										/>
 									</label>
 									<label class="input-label">
@@ -1384,16 +1417,16 @@ export function EditingWorkspace(handle: Handle) {
 										<select
 											class="text-input"
 											value={chapter.status}
-											on={{
-												change: (event) => {
+											mix={[
+												on<HTMLSelectElement>('change', (event) => {
 													const target =
 														event.currentTarget as HTMLSelectElement
 													updateChapterStatus(
 														chapter.id,
 														target.value as ChapterStatus,
 													)
-												},
-											}}
+												}),
+											]}
 										>
 											<option value="ready">ready</option>
 											<option value="review">review</option>
@@ -1439,7 +1472,11 @@ export function EditingWorkspace(handle: Handle) {
 												class="button button--ghost"
 												type="button"
 												disabled={applied}
-												on={{ click: () => applyCommand(command) }}
+												mix={[
+													on<HTMLButtonElement>('click', () =>
+														applyCommand(command),
+													),
+												]}
 											>
 												{applied ? 'Applied' : 'Apply'}
 											</button>
@@ -1474,12 +1511,12 @@ export function EditingWorkspace(handle: Handle) {
 							type="search"
 							placeholder="Search for a word or command marker"
 							value={searchQuery}
-							on={{
-								input: (event) => {
+							mix={[
+								on<HTMLInputElement>('input', (event) => {
 									const target = event.currentTarget as HTMLInputElement
 									updateSearchQuery(target.value)
-								},
-							}}
+								}),
+							]}
 						/>
 					</label>
 					{query.length === 0 ? (
@@ -1497,7 +1534,11 @@ export function EditingWorkspace(handle: Handle) {
 									<button
 										class="transcript-result"
 										type="button"
-										on={{ click: () => setPlayhead(word.start) }}
+										mix={[
+											on<HTMLButtonElement>('click', () =>
+												setPlayhead(word.start),
+											),
+										]}
 									>
 										<span class="transcript-time">
 											{formatTimestamp(word.start)}
