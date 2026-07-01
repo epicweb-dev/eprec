@@ -1,4 +1,4 @@
-import type { Handle } from 'remix/ui'
+import { on, type Handle } from 'remix/ui'
 
 type CounterSetup = { initial?: number }
 
@@ -8,12 +8,12 @@ export function Counter(handle: Handle, props: { setup?: CounterSetup } = {}) {
 		<button
 			type="button"
 			class="counter-button"
-			on={{
-				click: () => {
+			mix={[
+				on<HTMLButtonElement>('click', () => {
 					count += 1
 					handle.update()
-				},
-			}}
+				}),
+			]}
 		>
 			<span>Click count</span>
 			<span class="counter-value">{count}</span>

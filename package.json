@@ -7,13 +7,10 @@
     "type": "git",
     "url": "https://github.com/epicweb-dev/eprec"
   },
-  "imports": {
-    "#remix-ui-compat/*": "./app/remix-ui-compat/*.ts"
-  },
   "scripts": {
     "app:start": "bun --watch ./src/cli.ts app start",
     "format": "prettier --write .",
-    "test": "bun test process-course src/utils.test.ts app/remix-ui-compat/jsx-runtime.test.ts",
+    "test": "bun test process-course src/utils.test.ts",
     "test:e2e": "bun test ./e2e",
     "test:smoke": "bunx playwright test -c playwright/playwright-smoke-config.ts",
     "test:all": "bun test '**/*.test.ts'",
