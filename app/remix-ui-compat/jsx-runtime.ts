@@ -22,7 +22,9 @@ type LegacyHostProps = {
 }
 
 declare module 'remix/ui' {
-	interface HostProps<eventTarget extends EventTarget> extends LegacyHostProps {}
+	interface HostProps<
+		eventTarget extends EventTarget,
+	> extends LegacyHostProps {}
 }
 
 declare global {

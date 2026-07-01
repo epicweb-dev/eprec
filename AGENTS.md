@@ -34,8 +34,8 @@ feat!: change CLI argument format
 
 ## No React
 
-This application does NOT use React. We use `remix/ui` for UI components.
-Do not introduce React, Preact, or any other UI framework.
+This application does NOT use React. We use `remix/ui` for UI components. Do not
+introduce React, Preact, or any other UI framework.
 
 ### Remix Components vs React Components
 
