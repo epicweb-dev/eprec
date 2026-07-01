@@ -7,6 +7,9 @@
     "type": "git",
     "url": "https://github.com/epicweb-dev/eprec"
   },
+  "imports": {
+    "#remix-ui-compat/*": "./app/remix-ui-compat/*.ts"
+  },
   "scripts": {
     "app:start": "bun --watch ./src/cli.ts app start",
     "format": "prettier --write .",

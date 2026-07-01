@@ -100,12 +100,12 @@ export function createAppRouter(rootDir: string) {
 
 	router.map(routes.index, {
 		middleware: indexHandlers.middleware,
-		action: indexHandlers.loader,
+		handler: indexHandlers.loader,
 	})
 
 	router.map(routes.trimPoints, {
 		middleware: trimPointsHandlers.middleware,
-		action: trimPointsHandlers.loader,
+		handler: trimPointsHandlers.loader,
 	})
 
 	return router

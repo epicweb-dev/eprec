@@ -1,5 +1,5 @@
 import { matchSorter } from 'match-sorter'
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 import {
 	sampleEditSession,
 	type ChapterPlan,

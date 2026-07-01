@@ -34,7 +34,7 @@ feat!: change CLI argument format
 
 ## No React
 
-This application does NOT use React. We use `remix/component` for UI components.
+This application does NOT use React. We use `remix/ui` for UI components.
 Do not introduce React, Preact, or any other UI framework.
 
 ### Remix Components vs React Components
@@ -48,7 +48,7 @@ functionality receive a `Handle` as their first argument. Components that don't
 need the handle should omit it entirely:
 
 ```tsx
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 
 // Simple component that doesn't use the handle - no handle parameter needed
 function Greeting() {
@@ -85,7 +85,7 @@ function Counter(handle: Handle) {
 For components that need state, use the closure above the return to store state:
 
 ```tsx
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 
 function Counter(handle: Handle) {
 	// State lives in the closure
@@ -117,7 +117,7 @@ the returned function receives **regular props** (for rendering):
 > latest values. The setup prop is captured once at setup time and may be stale.
 
 ```tsx
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 
 function UserCard(
 	handle: Handle,
@@ -297,7 +297,7 @@ A parent component provides context using `handle.context.set()`. The context
 type is declared as a generic parameter on `Handle`:
 
 ```tsx
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 
 function ThemeProvider(handle: Handle<{ theme: 'light' | 'dark' }>) {
 	// Set context value for all descendants
@@ -318,7 +318,7 @@ Descendant components retrieve context using `handle.context.get()`, passing the
 provider component as the key:
 
 ```tsx
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 
 function ThemedButton(handle: Handle) {
 	// Get context from nearest ancestor ThemeProvider
@@ -351,7 +351,7 @@ function ThemedButton(handle: Handle) {
 **Full Example with Multiple Consumers:**
 
 ```tsx
-import type { Handle } from 'remix/component'
+import type { Handle } from 'remix/ui'
 
 // Provider component with typed context
 function UserProvider(

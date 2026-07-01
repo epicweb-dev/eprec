@@ -109,7 +109,7 @@ export function createBundlingRoutes(rootDir: string) {
 				splitting: false,
 				format: 'esm',
 				sourcemap: Bun.env.NODE_ENV === 'production' ? 'none' : 'inline',
-				jsx: { importSource: 'remix/component' },
+				jsx: { importSource: '#remix-ui-compat' },
 			})
 
 			if (!buildResult.success) {
