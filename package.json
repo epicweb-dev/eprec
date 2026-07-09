@@ -8,7 +8,8 @@
     "url": "https://github.com/epicweb-dev/eprec"
   },
   "scripts": {
-    "app:start": "bun --watch ./src/cli.ts app start",
+    "app:dev": "NODE_ENV=development bun --watch ./src/cli.ts app start",
+    "app:start": "NODE_ENV=production bun ./src/cli.ts app start",
     "format": "prettier --write .",
     "test": "bun test process-course src/utils.test.ts",
     "test:e2e": "bun test ./e2e",
