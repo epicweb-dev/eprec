@@ -48,20 +48,26 @@ bun src/process-course-video.ts "/path/to/input.mp4" "/path/to/output" \
 
 ## Web UI (experimental)
 
-Start the Remix-powered UI shell (watch mode enabled):
+Start the Remix-powered UI shell in development mode (watch mode enabled):
 
 ```bash
-bun run app:start
+bun run app:dev
 ```
 
 To preload a local video path for the UI:
 
 ```bash
-bun run app:start -- --video-path "/path/to/video.mp4"
+bun run app:dev -- --video-path "/path/to/video.mp4"
 ```
 
 Then open `http://localhost:3000`. Use `-- --port`, `-- --host`, or
 `-- --video-path` to override the defaults.
+
+For a production start without the file watcher:
+
+```bash
+bun run app:start
+```
 
 ## CLI Options
 

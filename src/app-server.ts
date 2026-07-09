@@ -241,31 +241,49 @@ export async function startAppServer(options: AppServerOptions = {}) {
 		return formatServerUrl(serverHostname, serverPort)
 	}
 	let cleanupInput = () => {}
+	let cleanupSignals = () => {}
 	let isRestarting = false
-	const stopServer = () => {
+	let isStopping = false
+	const stopServer = async (exitProcess: boolean) => {
+		if (isStopping) {
+			return
+		}
+		isStopping = true
 		console.log('[app] stopping server...')
 		cleanupInput()
-		server.stop()
-		process.exit(0)
+		cleanupSignals()
+		await server.stop(true)
+		if (exitProcess) {
+			process.exit(0)
+		}
 	}
 	const restartServer = async () => {
-		if (isRestarting) {
+		if (isRestarting || isStopping) {
 			return
 		}
 		isRestarting = true
 		try {
 			console.log('[app] restarting server...')
-			await server.stop()
+			await server.stop(true)
 			server = startServer(port, host)
 			console.log(`[app] running at ${getUrl()}`)
 		} finally {
 			isRestarting = false
 		}
 	}
+	const handleSignal = () => {
+		void stopServer(true)
+	}
+	process.once('SIGINT', handleSignal)
+	process.once('SIGTERM', handleSignal)
+	cleanupSignals = () => {
+		process.off('SIGINT', handleSignal)
+		process.off('SIGTERM', handleSignal)
+	}
 	cleanupInput = setupShortcutHandling({
 		getUrl,
 		restart: restartServer,
-		stop: stopServer,
+		stop: () => void stopServer(true),
 	})
 	const url = getUrl()
 
@@ -277,10 +295,7 @@ export async function startAppServer(options: AppServerOptions = {}) {
 			return server
 		},
 		url,
-		stop: () => {
-			cleanupInput()
-			server.stop()
-		},
+		stop: () => stopServer(false),
 	}
 }
 
