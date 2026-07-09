@@ -31,13 +31,13 @@ The audit implements:
 - `app:start` with `NODE_ENV=production` and no watcher
 - `SIGINT` and `SIGTERM` handling that closes active connections before exit
 
-This also activates the existing production minification and source-map
-settings in `server/bundling.ts`.
+This also activates the existing production minification and source-map settings
+in `server/bundling.ts`.
 
 ### High: adopt `remix/ui/button` and `remix/ui/input` through app-level mixes
 
-**Files:** `app/client/editing-workspace.tsx`,
-`app/client/trim-points.tsx`, `app/assets/styles.css`
+**Files:** `app/client/editing-workspace.tsx`, `app/client/trim-points.tsx`,
+`app/assets/styles.css`
 
 The two workspaces contain roughly 40 custom `.button` controls and 10 custom
 `.text-input` controls. There is no third-party browser component library to
@@ -55,35 +55,32 @@ regression coverage. The exact tone mapping, especially the app's unsupported
 
 ### High: fingerprint production browser assets before immutable caching
 
-**Files:** `server/bundling.ts`, `app/router.tsx`,
-`app/components/layout.tsx`
+**Files:** `server/bundling.ts`, `app/router.tsx`, `app/components/layout.tsx`
 
-Production currently builds browser modules on every request and sends
-one-year `immutable` cache headers for stable URLs such as
-`/app/client/entry.tsx`, `/node_modules/remix/ui`, and `/assets/styles.css`.
-Those URLs are not content-hashed, so a browser can retain stale code after an
-upgrade.
+Production currently builds browser modules on every request and sends one-year
+`immutable` cache headers for stable URLs such as `/app/client/entry.tsx`,
+`/node_modules/remix/ui`, and `/assets/styles.css`. Those URLs are not
+content-hashed, so a browser can retain stale code after an upgrade.
 
 Adopt a production build manifest with content-hashed filenames (the direction
-of the improved template and `remix/assets`) before retaining immutable
-caching. Until that pipeline exists, `no-cache` is safer. This was not changed
-in this audit because it affects the custom Bun bundler, package publication,
-and local fixture serving together.
+of the improved template and `remix/assets`) before retaining immutable caching.
+Until that pipeline exists, `no-cache` is safer. This was not changed in this
+audit because it affects the custom Bun bundler, package publication, and local
+fixture serving together.
 
 ### Medium: pilot `remix/ui/select`
 
 **File:** `app/client/editing-workspace.tsx`
 
-Three native selects choose primary/secondary chapters and chapter status.
-They are good semantic candidates for Beta 5's first-party `Select` and
-`Option`, which add consistent keyboard and listbox behavior. Migrate these
-after the app-level control theme exists; replacing them now would introduce a
-visually inconsistent popup and changes controlled-value behavior.
+Three native selects choose primary/secondary chapters and chapter status. They
+are good semantic candidates for Beta 5's first-party `Select` and `Option`,
+which add consistent keyboard and listbox behavior. Migrate these after the
+app-level control theme exists; replacing them now would introduce a visually
+inconsistent popup and changes controlled-value behavior.
 
 ### Medium: keep domain-specific editing controls custom
 
-**Files:** `app/client/editing-workspace.tsx`,
-`app/client/trim-points.tsx`
+**Files:** `app/client/editing-workspace.tsx`, `app/client/trim-points.tsx`
 
 The waveform canvas, trim handles, timeline ranges, range inputs, queue rows,
 and transcript jump results do not map cleanly to Beta 5 components. In
@@ -97,16 +94,16 @@ complexity without a clear behavior improvement.
 client workspace counterparts
 
 Breadcrumbs would add little value to a two-route application. Accordion and
-tabs would change the dense editor's information architecture and should only
-be introduced with a product requirement for collapsible or mutually exclusive
+tabs would change the dense editor's information architecture and should only be
+introduced with a product requirement for collapsible or mutually exclusive
 panels.
 
 ## `trustProxy`
 
 `trustProxy` does not help the current topology:
 
-- `src/app-server.ts` uses `Bun.serve()`, not
-  `createRequestListener()` from `remix/node-fetch-server`.
+- `src/app-server.ts` uses `Bun.serve()`, not `createRequestListener()` from
+  `remix/node-fetch-server`.
 - The server binds to loopback by default and the repository has no reverse
   proxy, container, or hosting configuration.
 - Routing only reads URL pathnames, browser requests use relative URLs, and the
@@ -122,14 +119,14 @@ otherwise clients can spoof host, protocol, and address data.
 
 ## Default template comparison
 
-| Beta 5 template improvement | Repository status |
-| --- | --- |
-| Production sets `NODE_ENV=production` | Adopted by `app:start` in this audit |
-| Development server owns the watcher | Adopted by `app:dev` |
+| Beta 5 template improvement               | Repository status                                                                   |
+| ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| Production sets `NODE_ENV=production`     | Adopted by `app:start` in this audit                                                |
+| Development server owns the watcher       | Adopted by `app:dev`                                                                |
 | Browser assets are minified in production | Already conditional in `server/bundling.ts`; now activated by the production script |
-| Client/server frame resolution | Not applicable; this app does not use Remix frames |
-| Node fetch server and `trustProxy` | Not applicable to the Bun adapter and current local-only topology |
-| Signal-aware shutdown | Adopted for `SIGINT` and `SIGTERM` |
+| Client/server frame resolution            | Not applicable; this app does not use Remix frames                                  |
+| Node fetch server and `trustProxy`        | Not applicable to the Bun adapter and current local-only topology                   |
+| Signal-aware shutdown                     | Adopted for `SIGINT` and `SIGTERM`                                                  |
 
 The next production-start improvement should be a prebuilt, fingerprinted
 browser asset pipeline. It is more valuable here than switching the working Bun
